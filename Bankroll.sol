@@ -65,22 +65,8 @@ contract BankRoll {
     _;
   }
 
-  modifier onlyFggContract() {
-    require(msg.sender == fggAddress);
-    _;
-  }
-
-  modifier isZero(int256[] _amount) {
-    uint256 positive = 0;
-    uint256 negative = 0;
-    for (uint i = 0; i < _amount.length; i++) {
-      if (_amount[i] > 0) {
-        positive = SafeMath.add(positive, uint256(_amount[i]));
-      } else {
-        negative = SafeMath.add(negative, uint256(_amount[i]));
-      }
-    }
-    require(positive == negative);
+  modifier onlySkcContract() {
+    require(msg.sender == skcAddress);
     _;
   }
 
@@ -95,80 +81,96 @@ contract BankRoll {
 
   event redeemEvent(address indexed sender, uint256 indexed amount);
   event withdrawEvent(address indexed sender, uint256 indexed amount);
-  event playGame(address sender, uint id, int256 amount);
+  event ledgerRecordEvent(uint256 _serialNumber, address _address, uint256 _oldPiont, uint256 _newPoint, string date);
 
   /*=====================================
   =            CONSTANTS                =
   =====================================*/
 
   address public owner;
-  address public fggAddress;
-  uint256 public totalSupply;
+  address public skcAddress;
   mapping (address => uint256) public points;
   mapping (address => bool) internal admins;
   address[] internal holders;
   address internal platform;
   uint256 public serialNumber;
 
+
   /*=======================================
   =            PUBLIC FUNCTIONS           =
   =======================================*/
 
-  constructor (address _fggAddress) public {
+  constructor (address _skcAddress)
+  public
+  {
     owner = msg.sender;
-    fggAddress = _fggAddress;
+    skcAddress = _skcAddress;
   }
 
-  function redeem(address _caller, uint256 _amount) public onlyFggContract returns (bool){
-    points[_caller] = SafeMath.add(points[_caller], _amount);
-    totalSupply = SafeMath.add(totalSupply, _amount);
+  //SKC换积分
+  //说明: 前端利用metamask进行兑换
+  function redeem(address _caller, uint256 _amount)
+  public
+  returns (bool)
+  {
+    //调用SKC合约判断当前用户是否足够的SKC,并且转入奖金池（合约持有）
+    //TODO
+    //判断成功后调用事件 链下更新积分
     emit redeemEvent(_caller,_amount);
     return true;
   }
 
-  function withdrawAll() public onlyHolders {
-    withdraw(points[msg.sender]);
-  }
-
-  ///"this" is safe
-  function withdraw(uint256 _amount) public returns (bool){
-    require(points[msg.sender] >= _amount);
-    points[msg.sender] = SafeMath.sub(points[msg.sender], _amount);
-    totalSupply = SafeMath.sub(totalSupply, _amount);
-    bool isSuccess = fggAddress.call(bytes4(keccak256("transfer(address,uint256)")), msg.sender, _amount);
-    assert(!isSuccess);
+  //积分换SKC
+  //说明：后端管理员调用  原因：同步原因，无法实时判断当前用户有多少积分,不做加减，所以只能信任链下
+  function withdraw(address _caller,uint256 _amount)
+  public
+  onlyAdministrator
+  returns (bool)
+  {
+    //调用SKC合约将用户转入对应的SKC
+    //TODO
+    //bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), msg.sender, _amount);
+    //assert(!isSuccess);
+    //判断转成功后调用事件，链下记录
     emit withdrawEvent(msg.sender, _amount);
     return true;
   }
 
   ///int256 --> uint256 is safe?
-  function updateLedger(address[] _address, int256[] _amount, uint id, uint256 _serialNumber)
+  //更新账本
+  //说明:
+  //1.后台调用,只能管理员进行调用
+  //2.游戏平台会进行结算清算分红，按积分方式发放，自动或者手动进行兑换SKC。
+  //3.只需要记录最终的用户积分明细。
+  function updateLedger(uint256 _serialNumber, address[] _address, uint256[] _oldPionts, uint256[] _newPoints, string date)
   public
   onlyAdministrator
-  isZero(_amount)
   {
-    require(_address.length == _amount.length);
-    for (uint i = 0; i < _address.length; i++) {
-      uint256 oldPoints = points[_address[i]];
-      if (_amount[i] > 0) {
-        points[_address[i]] = SafeMath.add(oldPoints, uint256(_amount[i]));
-      } else {
-        assert(oldPoints < uint256(_amount[i]));
-        points[_address[i]] = SafeMath.sub(oldPoints, uint256(_amount[i]));
-      }
-      emit playGame(_address[i], id, _amount[i]);
-    }
+    require(date);
+    require(_address.length == _oldPionts.length);
+    require(_oldPionts.length == _newPoints.length);
     serialNumber = _serialNumber;
-    /// calculate the sum of
+    for (uint i = 0; i < _address.length; i++) {
+      //用户游戏积分更新
+      points[_address[i]] = _newPoints[i];
+      //暂定每个监听，是否需要一起监听。
+      emit ledgerRecordEvent(_serialNumber, _address[i], _oldPionts[i], _newPoints[i], date);
+    }
   }
 
-  function setAdministrator(address[] _administrators) public onlyOwner {
+  function setAdministrator(address[] _administrators)
+  public
+  onlyOwner
+  {
     for (uint i = 0; i < _administrators.length; i++) {
       admins[_administrators[i]] = true;
     }
   }
 
-  function unsetAdministrator(address[] _administrators) public onlyOwner {
+  function unsetAdministrator(address[] _administrators)
+   public
+   onlyOwner
+   {
     for (uint i = 0; i < _administrators.length; i++) {
       admins[_administrators[i]] = false;
     }
