@@ -89,10 +89,8 @@ contract BankRoll {
 
   address public owner;
   address public skcAddress;
-  mapping (address => uint256) public points;
+  mapping (address => uint256) internal points;
   mapping (address => bool) internal admins;
-  address[] internal holders;
-  address internal platform;
   uint256 public serialNumber;
 
 
@@ -107,18 +105,30 @@ contract BankRoll {
     skcAddress = _skcAddress;
   }
 
-  //SKC换积分
-  //说明: 前端利用metamask进行兑换
-  function redeem(address _caller, uint256 _amount)
-  public
-  returns (bool)
-  {
+    //SKC CONTRACT 调用
+    //说明: 利用ETH直接换取SKC换取积分，这样就不用2次操作
+    function eth_redeem(address _caller, uint256 _amount)
+    public
+    onlySkcContract
+    returns (bool)
+    {
+      //直接调用事件监听充值积分，
+      emit redeemEvent(_caller,_amount);
+      return true;
+    }
+
+    //SKC换积分
+    //说明: 前端利用metamask进行兑换
+    function redeem(address _caller, uint256 _amount)
+    public
+    returns (bool)
+    {
     //调用SKC合约判断当前用户是否足够的SKC,并且转入奖金池（合约持有）
     //TODO
     //判断成功后调用事件 链下更新积分
     emit redeemEvent(_caller,_amount);
     return true;
-  }
+    }
 
   //积分换SKC
   //说明：后端管理员调用  原因：同步原因，无法实时判断当前用户有多少积分,不做加减，所以只能信任链下
@@ -142,11 +152,10 @@ contract BankRoll {
   //1.后台调用,只能管理员进行调用
   //2.游戏平台会进行结算清算分红，按积分方式发放，自动或者手动进行兑换SKC。
   //3.只需要记录最终的用户积分明细。
-  function updateLedger(uint256 _serialNumber, address[] _address, uint256[] _oldPionts, uint256[] _newPoints, string date)
+  function updateLedger(uint256 _serialNumber, address[] _address, uint256[] _oldPionts, uint256[] _newPoints, string datetime)
   public
   onlyAdministrator
   {
-    require(date);
     require(_address.length == _oldPionts.length);
     require(_oldPionts.length == _newPoints.length);
     serialNumber = _serialNumber;
@@ -154,7 +163,7 @@ contract BankRoll {
       //用户游戏积分更新
       points[_address[i]] = _newPoints[i];
       //暂定每个监听，是否需要一起监听。
-      emit ledgerRecordEvent(_serialNumber, _address[i], _oldPionts[i], _newPoints[i], date);
+      emit ledgerRecordEvent(_serialNumber, _address[i], _oldPionts[i], _newPoints[i], datetime);
     }
   }
 
@@ -184,10 +193,12 @@ contract BankRoll {
     admins[newOwner] = true;
   }
 
-  function replacePlatformAddress(address _platform)
-  public
-  onlyOwner
+
+  //用户查询链上记录的积分，可能不链下不同步
+  function point(address who)
+  constant
+  returns (uint256)
   {
-    platform = _platform;
+  	    return points[who];
   }
 }
