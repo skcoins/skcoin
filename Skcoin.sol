@@ -119,22 +119,34 @@ contract Skcoin {
         uint holderNumber //当前SKC持有人数量
     );
 
+    /*
+    * 兑换游戏积分
+    */
     event RedeemGamePoints(
-        address indexed customerAddress,
-        uint tokenAmount
+        address indexed customerAddress, //用户地址
+        uint tokenAmount //用于兑换游戏积分的Token数量
     );
 
+    /*
+    * 用户选择的股息率
+    */
     event UserDividendRate(
         address user,
         uint divRate
     );
 
+    /*
+    * Token兑换ETH
+    */
     event onTokenSell(
-        address indexed customerAddress,
-        uint tokensBurned,
-        uint ethereumEarned
+        address indexed customerAddress, //用户地址
+        uint tokensBurned, //兑换ETH时使用的Token数量
+        uint ethereumEarned //最终兑换的ETH数
     );
 
+    /*
+    * 暂时未使用
+    */
     event onReinvestment(
         address indexed customerAddress,
         uint ethereumReinvested,
@@ -146,16 +158,22 @@ contract Skcoin {
         uint ethereumWithdrawn
     );
 
+    /*
+    * Token转帐
+    */
     event Transfer(
-        address indexed from,
-        address indexed to,
-        uint tokens
+        address indexed from, //Token转出地址
+        address indexed to, //Token转入地址
+        uint tokens //token数量
     );
 
+    /*
+    * 将Token授权给其它地址
+    */
     event Approval(
-        address indexed tokenOwner,
-        address indexed spender,
-        uint tokens
+        address indexed tokenOwner, //Token的原来持有者
+        address indexed spender, //被授权人，可以花费tokenOwner授权数量的Token
+        uint tokens //授权的Token数量
     );
 
     event Allocation(
@@ -189,6 +207,9 @@ contract Skcoin {
 
     }
 
+    /*
+    * 设置BankROll合约地址
+    */
     function setBankrollAddress(address _bankrollAddress)
     public
     onlyAdministrator
@@ -196,6 +217,9 @@ contract Skcoin {
         bankrollAddress = _bankrollAddress;
     }
 
+    /**
+    * 设置平台收益地址
+    */
     function setPlatformAddress(address _platformAddress)
     public
     onlyAdministrator
@@ -205,6 +229,9 @@ contract Skcoin {
         userDividendRate[platformAddress] = 50;
     }
 
+    /*
+    * ETH直接购买游戏积分
+    */
     function ethBuyGamePoints(address _referredBy, uint8 divChoice)
     public
     payable
@@ -223,6 +250,9 @@ contract Skcoin {
         redeemGamePoints(difference);
     }
 
+    /*
+    * SKC兑换游戏积分
+    */
     function redeemGamePoints(uint _amountOfTokens)
     public
     onlyHolders
@@ -234,6 +264,9 @@ contract Skcoin {
         emit RedeemGamePoints(msg.sender, _amountOfTokens);
     }
 
+    /*
+    * 将当前累积的Token分给当前的持币用户
+    */
     function divide()
     public
     onlyAdministrator
@@ -262,7 +295,9 @@ contract Skcoin {
         emit Divide(msg.sender, _dividendTotalToken, holders.length);
     }
 
-    function addOrUpdateHolder(address _holderAddr) internal {
+    function addOrUpdateHolder(address _holderAddr) 
+    internal
+    {
         // Check and add holder to array
         if (holderIndex[_holderAddr] == 0) {
             holderIndex[_holderAddr] = holders.length++;
@@ -271,6 +306,7 @@ contract Skcoin {
     }
 
     /**
+     * ETH购买SKC，并设置选择的股息率
      * Same as buy, but explicitly sets your dividend percentage.
      * If this has been called before, it will update your `default' dividend
      *   percentage for regular buy transactions going forward.
@@ -309,7 +345,9 @@ contract Skcoin {
     }
 
     // All buys except for the above one require regular phase.
-
+    /**
+     * 使用上一次选择的股息率购买SKC
+     */
     function buy(address _referredBy)
     public
     payable
@@ -321,6 +359,9 @@ contract Skcoin {
         purchaseTokens(msg.value, _referredBy);
     }
 
+    /** 
+     * ETH购买SKC后，将SKC转账给target账户
+     */
     function buyAndTransfer(address _referredBy, address target)
     public
     payable
@@ -329,6 +370,9 @@ contract Skcoin {
         buyAndTransfer(_referredBy, target, empty, 20);
     }
 
+    /** 
+     * ETH购买SKC后，将SKC转账给target账户
+     */
     function buyAndTransfer(address _referredBy, address target, bytes _data)
     public
     payable
@@ -336,7 +380,9 @@ contract Skcoin {
         buyAndTransfer(_referredBy, target, _data, 20);
     }
 
-    // Overload
+    /** 
+     * ETH购买SKC后，将SKC转账给target账户
+     */
     function buyAndTransfer(address _referredBy, address target, bytes _data, uint8 divChoice)
     public
     payable
@@ -375,6 +421,9 @@ contract Skcoin {
 
 
     //recalculate because the profitPerDivToken and payoutsTo_ have changed
+    /** 
+     * 暂时未支持  
+     */
     function reinvest()
     dividendHolder()
     public
@@ -396,6 +445,9 @@ contract Skcoin {
         emit onReinvestment(_customerAddress, _dividends, _tokens);
     }
 
+    /**
+     * 退出项目，所有SKC转为ETH
+     */
     function exit()
     public
     {
@@ -410,6 +462,9 @@ contract Skcoin {
         withdraw(_customerAddress);
     }
 
+    /**
+     * 暂时不支持
+     */
     function withdraw(address _recipient)
     dividendHolder()
     public
@@ -437,6 +492,9 @@ contract Skcoin {
 
     // Sells front-end tokens.
     // Logic concerning step-pricing of tokens pre/post-ICO is encapsulated in tokensToEthereum_.
+    /**
+     * 将Token卖成ETH
+     */
     function sell(uint _amountOfTokens)
     onlyHolders()
     public
@@ -494,6 +552,7 @@ contract Skcoin {
     }
 
     /**
+     * Token的转账功能
      * Transfer tokens from the caller to a new holder.
      * No charge incurred for the transfer. We'd make a terrible bank.
      */
@@ -510,6 +569,9 @@ contract Skcoin {
 
     }
 
+    /**
+     * ERC20的授权函数
+     */
     function approve(address spender, uint tokens)
     public
     returns (bool)
@@ -565,6 +627,9 @@ contract Skcoin {
     }
 
     // Who'd have thought we'd need this thing floating around?
+    /**
+     * 当前SKC的发行量
+     */
     function totalSupply()
     public
     view
@@ -575,6 +640,9 @@ contract Skcoin {
 
     // Anyone can start the regular phase 2 weeks after the ICO phase starts.
     // In case the devs die. Or something.
+    /**
+     * 手动结束ICO阶段，进入正常阶段
+     */
     function publicStartRegularPhase()
     public
     {
@@ -588,6 +656,9 @@ contract Skcoin {
 
 
     // Fire the starting gun and then duck for cover.
+    /**
+     * 开启ICO阶段
+     */
     function startICOPhase()
     onlyAdministrator()
     public
@@ -599,6 +670,9 @@ contract Skcoin {
     }
 
     // Fire the ... ending gun?
+    /**
+     * 结束ICO阶段
+     */
     function endICOPhase()
     onlyAdministrator()
     public
@@ -616,6 +690,9 @@ contract Skcoin {
     }
 
     // The death of a great man demands the birth of a great son.
+    /**
+     * 更新管理员状态
+     */
     function setAdministrator(address _newAdmin, bool _status)
     onlyAdministrator()
     public
@@ -623,6 +700,9 @@ contract Skcoin {
         administrators[_newAdmin] = _status;
     }
 
+    /** 
+    * 设置能够获取推荐费的最小持币数量
+    */
     function setStakingRequirement(uint _amountOfTokens)
     onlyAdministrator()
     public
@@ -646,6 +726,9 @@ contract Skcoin {
         symbol = _symbol;
     }
 
+    /**
+     * 修改BankRoll合约地址
+     */
     function changeBankroll(address _newBankrollAddress)
     onlyAdministrator
     public
@@ -655,6 +738,9 @@ contract Skcoin {
 
     /*----------  HELPERS AND CALCULATORS  ----------*/
 
+    /**
+     * 当前合约持有ETH数量
+     */
     function totalEthereumBalance()
     public
     view
@@ -663,6 +749,9 @@ contract Skcoin {
         return address(this).balance;
     }
 
+    /**
+     * ICO阶段募集的ETH数量
+     */
     function totalEthereumICOReceived()
     public
     view
@@ -672,6 +761,7 @@ contract Skcoin {
     }
 
     /**
+     * 获取用户当前默认的股息率
      * Retrieves your currently selected dividend rate.
      */
     function getMyDividendRate()
@@ -685,17 +775,7 @@ contract Skcoin {
     }
 
     /**
-     * Retrieve the total frontend token supply
-     */
-    function getFrontEndTokenSupply()
-    public
-    view
-    returns (uint)
-    {
-        return tokenSupply;
-    }
-
-    /**
+     * 当前分成Token的总数量，类似于发行的总的股份数
      * Retreive the total dividend token supply
      */
     function getDividendTokenSupply()
@@ -707,6 +787,7 @@ contract Skcoin {
     }
 
     /**
+     * 获取用户的Token数
      * Retrieve the frontend tokens owned by the caller
      */
     function myFrontEndTokens()
@@ -719,6 +800,7 @@ contract Skcoin {
     }
 
     /**
+     * 获取用户的分成Token数
      * Retrieve the dividend tokens owned by the caller
      */
     function myDividendTokens()
@@ -730,6 +812,9 @@ contract Skcoin {
         return getDividendTokenBalanceOf(_customerAddress);
     }
 
+    /**
+     * 当前的推荐奖励
+     */
     function myReferralDividends()
     public
     view
@@ -738,6 +823,10 @@ contract Skcoin {
         return myDividends(true) - myDividends(false);
     }
 
+    /**
+     * 获取当前的分成数量
+     * @_includeReferralBonus 真包含推荐的奖励
+     */
     function myDividends(bool _includeReferralBonus)
     public
     view
@@ -755,6 +844,9 @@ contract Skcoin {
         return _includeReferralBonus ? dividendsOf(_customerAddress) + referralBalance_[_customerAddress] : dividendsOf(_customerAddress);
     }
 
+    /**
+     * 获取目标地址当前的SKC数量
+     */
     function getFrontEndTokenBalanceOf(address _customerAddress)
     view
     public
@@ -788,6 +880,9 @@ contract Skcoin {
     }
 
     // Get the sell price at the user's average dividend rate
+    /**
+     * 获取当前的售卖价格,以卖出0.001 ether计算
+     */
     function sellPrice()
     public
     view
@@ -813,6 +908,9 @@ contract Skcoin {
     }
 
     // Get the buy price at a particular dividend rate
+    /**
+     * 获取当前的购买价格
+     */
     function buyPrice(uint dividendRate)
     public
     view
@@ -837,6 +935,9 @@ contract Skcoin {
         return theBuyPrice;
     }
 
+    /**
+     * 计算当前用一定量的ether能够买到的SKC数量
+     */
     function calculateTokensReceived(uint _ethereumToSpend)
     public
     view
@@ -850,6 +951,9 @@ contract Skcoin {
 
     // When selling tokens, we need to calculate the user's current dividend rate.
     // This is different from their selected dividend rate.
+    /**
+     * 计算当前卖出一定量的SKC能够得到ether的数量
+     */
     function calculateEthereumReceived(uint _tokensToSell)
     public
     view
@@ -864,10 +968,10 @@ contract Skcoin {
     }
 
     /*
+     * 计算用户的平均股息率
      * Get's a user's average dividend rate - which is just their divTokenBalance / tokenBalance
      * We multiply by magnitude to avoid precision errors.
      */
-
     function getUserAverageDividendRate(address user) public view returns (uint) {
         return (magnitude * dividendTokenBalanceLedger_[user]).div(frontTokenBalanceLedger[user]);
     }
@@ -1012,6 +1116,9 @@ contract Skcoin {
     }
 
     // How many tokens one gets from a certain amount of ethereum.
+    /**
+     * 一定量的ether能换多少SKC，此方法未扣除平台抽成和股息率部分
+     */
     function ethereumToTokens_(uint _ethereumAmount)
     public
     view
@@ -1102,6 +1209,9 @@ contract Skcoin {
     }
 
     // How much Ether we get from selling N tokens
+    /**
+     * 一定量的SKC能换多少Ether，此方法未扣除平台抽成和股息率部分
+     */
     function tokensToEthereum_(uint _tokens)
     public
     view
