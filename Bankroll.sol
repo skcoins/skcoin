@@ -49,16 +49,35 @@ contract BankRoll {
         skcAddress = _skcAddress;
     }
 
-    //SKC换积分
-    function tokenToPoint(uint256 _id, address _recharger, uint256 _amount)
+    //SKC换积分 METAMASK调用
+    function tokenToPointByMetaMask(uint256 _id, uint256 _amount)
     public
     returns (bool)
     {
-        bool isSuccess = skcAddress.call(bytes4(keccak256("redeemGamePoints(uint256, address, uint256)")), id, _recharger, _amount);
+        return tokenToPoint(_id, msg.sender, _amount);
+    }
+
+    //SKC换积分,SKC合约调用
+    function tokenToPointBySkcContract(uint256 _id, address _recharger, uint256 _amount)
+    public
+    onlySkcContract
+    returns (bool)
+    {
+        return tokenToPoint(_id, _recharger, _amount);
+    }
+
+    //SKC换积分
+    function tokenToPoint(uint256 _id, address _recharger, uint256 _amount)
+    internal
+    returns (bool)
+    {
+        bool isSuccess = skcAddress.call(bytes4(keccak256("redeemGamePoints(uint256, address, uint256)")), _id, msg.sender, _amount);
         assert(!isSuccess);
         emit tokenToPointEvent(_id, _recharger, _amount);
         return true;
     }
+
+
 
      //积分换SKC
      function pointToToken(uint256 _id, address _withdrawer, uint256 _amount)
@@ -66,8 +85,8 @@ contract BankRoll {
      onlyAdministrator
      returns (bool)
      {
-         bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
-         assert(!isSuccess);
+         //bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
+         //assert(!isSuccess);
          emit pointToTokenEvent(_id, _withdrawer, _amount);
          return true;
      }
