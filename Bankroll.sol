@@ -24,8 +24,6 @@ contract BankRoll {
     /*==============================
     =            EVENTS            =
     ==============================*/
-
-    event ethToPointEvent(uint256 _id, address indexed _recharger, uint256 _eth_val, uint256 _amount);
     event tokenToPointEvent(uint256 _id, address indexed _recharger, uint256 _amount);
     event pointToTokenEvent(uint256 _id, address indexed sender, uint256 amount);
     event ledgerRecordEvent(uint256 _id, address[] _address, uint256[] _oldPiont, uint256[] _newPoint);
@@ -51,23 +49,13 @@ contract BankRoll {
         skcAddress = _skcAddress;
     }
 
-
-    function ethToPoint(uint256 _id, address _recharger, uint256 _eth_val, uint256 _amount)
-    public
-    onlySkcContract
-    returns (bool)
-    {
-      emit ethToPointEvent(_id, _recharger, _eth_val, _amount);
-      return true;
-    }
-
     //SKC换积分
     function tokenToPoint(uint256 _id, address _recharger, uint256 _amount)
     public
     returns (bool)
     {
-        //bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _recharger, _amount);
-        //assert(!isSuccess);
+        bool isSuccess = skcAddress.call(bytes4(keccak256("redeemGamePoints(uint256, address, uint256)")), id, _recharger, _amount);
+        assert(!isSuccess);
         emit tokenToPointEvent(_id, _recharger, _amount);
         return true;
     }
@@ -78,8 +66,8 @@ contract BankRoll {
      onlyAdministrator
      returns (bool)
      {
-         //bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
-         //assert(!isSuccess);
+         bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
+         assert(!isSuccess);
          emit pointToTokenEvent(_id, _withdrawer, _amount);
          return true;
      }
