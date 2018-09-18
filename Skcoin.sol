@@ -1,4 +1,4 @@
-pragma solidity ^0.4.23;
+pragma solidity ^0.4.24;
 
 
 contract Skcoin {
@@ -32,8 +32,8 @@ contract Skcoin {
      ================================*/
 
     string public                        name = "Skcoin"; //名称
-    string public                        symbol = "SKY";    //缩写
-    uint internal                        tokenSupply = 0;        //供应量
+    string public                        symbol = "SKY";  //缩写
+    uint   internal                      tokenSupply = 0; //供应量
 
     mapping(address => 
     mapping(address => uint))     public allowed;
@@ -101,13 +101,24 @@ contract Skcoin {
     /*
     * ETH购买Skc
     */
-    event onTokenPurchase(
+    event OnTokenPurchase(
         address indexed customerAddress, //地址
         uint incomingEthereum, //总的ETH，包含平台抽成
-        uint8 _divChoice, //股息率
         uint tokensMinted, //购买Token数
         uint tokenPrice, //token价格
-        address referredBy//推荐人
+        uint8 divChoice, //股息率
+        address referrer //推荐人
+    );
+
+    /*
+    * Token兑换ETH
+    */
+    event OnTokenSell(
+        address indexed customerAddress, //用户地址
+        uint ethereumEarned, //最终兑换的ETH数
+        uint tokensBurned, //兑换ETH时使用的Token数量
+        uint tokenPrice, //token价格
+        uint divRate //平均股息率
     );
 
     /*
@@ -119,12 +130,18 @@ contract Skcoin {
         uint holderNumber //当前SKC持有人数量
     );
 
-    /*
-    * 兑换游戏积分
-    */
     event RedeemGamePoints(
-        address indexed customerAddress, //用户地址
-        uint tokenAmount //用于兑换游戏积分的Token数量
+        uint256 id,
+        address indexed from, //Token转出地址
+        address indexed to, //Token转入地址
+        uint tokens //token数量
+    );
+
+    /*
+    * SKC分红
+    */
+    event SKCDivide(
+
     );
 
     /*
@@ -136,24 +153,15 @@ contract Skcoin {
     );
 
     /*
-    * Token兑换ETH
-    */
-    event onTokenSell(
-        address indexed customerAddress, //用户地址
-        uint tokensBurned, //兑换ETH时使用的Token数量
-        uint ethereumEarned //最终兑换的ETH数
-    );
-
-    /*
     * 暂时未使用
     */
-    event onReinvestment(
+    event OnReinvestment(
         address indexed customerAddress,
         uint ethereumReinvested,
         uint tokensMinted
     );
 
-    event onWithdraw(
+    event OnWithdraw(
         address indexed customerAddress,
         uint ethereumWithdrawn
     );
@@ -204,7 +212,65 @@ contract Skcoin {
         validDividendRates[20] = true;
         validDividendRates[35] = true;
         validDividendRates[50] = true;
+    }
 
+    /** 获取常量的一些方法 */
+
+    /**
+     * 当前SKC的发行量\流通量
+     */
+    function totalSupply()
+    public
+    view
+    returns (uint256)
+    {
+        return tokenSupply;
+    }
+
+    /**
+     * 当前合约持有ETH数量
+     */
+    function totalEthereumBalance()
+    public
+    view
+    returns (uint)
+    {
+        return address(this).balance;
+    }
+
+    /**
+     * ICO阶段募集的ETH数量
+     */
+    function totalEthereumICOReceived()
+    public
+    view
+    returns (uint)
+    {
+        return ethInvestedDuringICO;
+    }
+
+    /**
+     * 调用者的SKC余额
+     * Retrieve the frontend tokens owned by the caller
+     */
+    function myFrontEndTokens()
+    public
+    view
+    returns (uint)
+    {
+        address _customerAddress = msg.sender;
+        return balanceOf(_customerAddress);
+    }
+
+    /**
+     * 获取目标地址的SKC余额
+     */
+    function balanceOf(address _customerAddress)
+    view
+    public
+    returns (uint)
+    {
+        return frontTokenBalanceLedger[_customerAddress];
     }
 
     /*
@@ -215,6 +281,17 @@ contract Skcoin {
     onlyAdministrator
     {
         bankrollAddress = _bankrollAddress;
+    }
+
+    /**
+     * 修改BankRoll合约地址
+     * wj 需要将旧地址的Token转到新地址？
+     */
+    function changeBankroll(address _newBankrollAddress)
+    onlyAdministrator
+    public
+    {   
+        bankrollAddress = _newBankrollAddress;
     }
 
     /**
@@ -232,10 +309,10 @@ contract Skcoin {
     /*
     * ETH直接购买游戏积分
     */
-    function ethBuyGamePoints(address _referredBy, uint8 divChoice)
+    function ethBuyGamePoints(uint256 _id, address _referredBy, uint8 divChoice)
     public
     payable
-    returns (uint)
+    returns (uint256)
     {
         // wj ICO phrase is enable?
         //require(regularPhase);
@@ -244,24 +321,40 @@ contract Skcoin {
         if (userSelectedRate[_customerAddress] && divChoice == 0) {
             purchaseTokens(msg.value, _referredBy);
         } else {
-            buyAndSetDivPercentage(_referredBy, divChoice, "0x0");
+            buyAndSetDivPercentage(_referredBy, divChoice);
         }
         uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
-        redeemGamePoints(difference);
+
+        bool isSuccess = bankrollAddress.call(bytes4(keccak256("tokenToPointBySkcContract(uint256, address, uint256)")),_id, msg.sender, difference);
+        assert(!isSuccess);
+        return difference;
     }
 
     /*
     * SKC兑换游戏积分
     */
-    function redeemGamePoints(uint _amountOfTokens)
+    function redeemGamePoints(uint256 _id, address _caller, uint _amountOfTokens)
     public
-    onlyHolders
+    returns (bool)
     {
-        bool isSuccess = transfer(bankrollAddress, _amountOfTokens);
-        require(isSuccess);
-        isSuccess = Bankroll(bankrollAddress).redeem(msg.sender, _amountOfTokens);
-        require(isSuccess);
-        emit RedeemGamePoints(msg.sender, _amountOfTokens);
+        // Only BankROll contract
+        require(msg.sender == bankrollAddress);
+        require(frontTokenBalanceLedger[_caller] >= _amountOfTokens);
+
+        //require(regularPhase);
+
+        // Calculate how many back-end dividend tokens to transfer.
+        // This amount is proportional to the caller's average dividend rate multiplied by the proportion of tokens being transferred.
+        uint _amountOfDivTokens = _amountOfTokens.mul(getUserAverageDividendRate(_caller)).div(magnitude);
+
+        // Exchange tokens
+        frontTokenBalanceLedger[_caller] = frontTokenBalanceLedger[_caller].sub(_amountOfTokens);
+        frontTokenBalanceLedger[bankrollAddress] = frontTokenBalanceLedger[bankrollAddress].add(_amountOfTokens);
+        dividendTokenBalanceLedger_[_caller] = dividendTokenBalanceLedger_[_caller].sub(_amountOfDivTokens);
+        dividendTokenBalanceLedger_[bankrollAddress] = dividendTokenBalanceLedger_[bankrollAddress].add(_amountOfDivTokens);
+
+        emit RedeemGamePoints(_id, _caller, bankrollAddress, _amountOfTokens);
+        return true;
     }
 
     /*
@@ -307,11 +400,11 @@ contract Skcoin {
 
     /**
      * ETH购买SKC，并设置选择的股息率
-     * Same as buy, but explicitly sets your dividend percentage.
+     * Same as buy, but explicitly sets your dividend percentage.   
      * If this has been called before, it will update your `default' dividend
      *   percentage for regular buy transactions going forward.
      */
-    function buyAndSetDivPercentage(address _referredBy, uint8 _divChoice, string providedUnhashedPass)
+    function buyAndSetDivPercentage(address _referredBy, uint8 _divChoice)
     public
     payable
     returns (uint)
@@ -393,7 +486,7 @@ contract Skcoin {
         if (userSelectedRate[_customerAddress] && divChoice == 0) {
             purchaseTokens(msg.value, _referredBy);
         } else {
-            buyAndSetDivPercentage(_referredBy, divChoice, "0x0");
+            buyAndSetDivPercentage(_referredBy, divChoice);
         }
         uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
         transferTo(msg.sender, target, difference, _data);
@@ -415,34 +508,8 @@ contract Skcoin {
         if (userSelectedRate[_customerAddress]) {
             purchaseTokens(msg.value, 0x0);
         } else {
-            buyAndSetDivPercentage(0x0, 20, "0x0");
+            buyAndSetDivPercentage(0x0, 20);
         }
-    }
-
-
-    //recalculate because the profitPerDivToken and payoutsTo_ have changed
-    /** 
-     * 暂时未支持  
-     */
-    function reinvest()
-    dividendHolder()
-    public
-    {
-        require(regularPhase);
-        uint _dividends = myDividends(false);
-
-        // Pay out requisite `virtual' dividends.
-        address _customerAddress = msg.sender;
-        payoutsTo_[_customerAddress] += (int256) (_dividends * magnitude);
-
-        _dividends += referralBalance_[_customerAddress];
-        referralBalance_[_customerAddress] = 0;
-
-        // wj purchaseTokens() para should be ETH ,not be token ?
-        uint _tokens = purchaseTokens(_dividends, 0x0);
-
-        // Fire logging event.
-        emit onReinvestment(_customerAddress, _dividends, _tokens);
     }
 
     /**
@@ -487,7 +554,7 @@ contract Skcoin {
         _recipient.transfer(_dividends);
 
         // Fire logging event.
-        emit onWithdraw(_recipient, _dividends);
+        emit OnWithdraw(_recipient, _dividends);
     }
 
     // Sells front-end tokens.
@@ -506,6 +573,8 @@ contract Skcoin {
         require(_amountOfTokens <= frontTokenBalanceLedger[msg.sender]);
 
         uint _frontEndTokensToBurn = _amountOfTokens;
+
+        uint _sellPrice = sellPrice();
 
         // Calculate how many dividend tokens this action burns.
         // Computed as the caller's average dividend rate multiplied by the number of front-end tokens held.
@@ -548,7 +617,7 @@ contract Skcoin {
         }
 
         // Fire logging event.
-        emit onTokenSell(msg.sender, _frontEndTokensToBurn, _taxedEthereum);
+        emit OnTokenSell(msg.sender, _taxedEthereum, _frontEndTokensToBurn, _sellPrice, userDivRate);
     }
 
     /**
@@ -624,18 +693,6 @@ contract Skcoin {
         }
 
         transferFromInternal(_from, _to, _amountOfTokens, _data);
-    }
-
-    // Who'd have thought we'd need this thing floating around?
-    /**
-     * 当前SKC的发行量
-     */
-    function totalSupply()
-    public
-    view
-    returns (uint256)
-    {
-        return tokenSupply;
     }
 
     // Anyone can start the regular phase 2 weeks after the ICO phase starts.
@@ -726,39 +783,7 @@ contract Skcoin {
         symbol = _symbol;
     }
 
-    /**
-     * 修改BankRoll合约地址
-     */
-    function changeBankroll(address _newBankrollAddress)
-    onlyAdministrator
-    public
-    {
-        bankrollAddress = _newBankrollAddress;
-    }
-
     /*----------  HELPERS AND CALCULATORS  ----------*/
-
-    /**
-     * 当前合约持有ETH数量
-     */
-    function totalEthereumBalance()
-    public
-    view
-    returns (uint)
-    {
-        return address(this).balance;
-    }
-
-    /**
-     * ICO阶段募集的ETH数量
-     */
-    function totalEthereumICOReceived()
-    public
-    view
-    returns (uint)
-    {
-        return ethInvestedDuringICO;
-    }
 
     /**
      * 获取用户当前默认的股息率
@@ -787,19 +812,6 @@ contract Skcoin {
     }
 
     /**
-     * 获取用户的Token数
-     * Retrieve the frontend tokens owned by the caller
-     */
-    function myFrontEndTokens()
-    public
-    view
-    returns (uint)
-    {
-        address _customerAddress = msg.sender;
-        return getFrontEndTokenBalanceOf(_customerAddress);
-    }
-
-    /**
      * 获取用户的分成Token数
      * Retrieve the dividend tokens owned by the caller
      */
@@ -825,7 +837,7 @@ contract Skcoin {
 
     /**
      * 获取当前的分成数量
-     * @_includeReferralBonus 真包含推荐的奖励
+     * 包含推荐的奖励
      */
     function myDividends(bool _includeReferralBonus)
     public
@@ -844,24 +856,7 @@ contract Skcoin {
         return _includeReferralBonus ? dividendsOf(_customerAddress) + referralBalance_[_customerAddress] : dividendsOf(_customerAddress);
     }
 
-    /**
-     * 获取目标地址当前的SKC数量
-     */
-    function getFrontEndTokenBalanceOf(address _customerAddress)
-    view
-    public
-    returns (uint)
-    {
-        return frontTokenBalanceLedger[_customerAddress];
-    }
 
-    function balanceOf(address _owner)
-    view
-    public
-    returns (uint)
-    {
-        return getFrontEndTokenBalanceOf(_owner);
-    }
 
     function getDividendTokenBalanceOf(address _customerAddress)
     view
@@ -996,123 +991,122 @@ contract Skcoin {
     {
         require(_incomingEthereum >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
 
-        uint toReferrer;
-        uint toTokenHolders;
-        uint toPlatform;
-        uint toPlatformToken;
+        //uint toReferrer;
+        //uint toTokenHolders;
+        //uint toPlatform;
+        //uint toPlatformToken;
 
-        uint dividendAmount;
+        //uint dividendAmount;
 
         uint tokensBought;
-        uint dividendTokensBought;
+        //uint dividendTokensBought;
 
-        uint remainingEth = _incomingEthereum;
+        //uint remainingEth = _incomingEthereum;
 
-        uint fee;
+        //uint fee;
 
         uint tokenPrice = buyPrice(userDividendRate[msg.sender]);
 
-        uint dividendRate = userDividendRate[msg.sender];
+        uint8 dividendRate = userDividendRate[msg.sender];
 
         // 2% for platform is taken off before anything else
-        if (regularPhase) {
-            toPlatform = remainingEth.div(100).mul(2);
-            remainingEth = remainingEth.sub(toPlatform);
-        } else {
+        //if (regularPhase) {
+            //toPlatform = remainingEth.div(100).mul(2);
+            //remainingEth = remainingEth.sub(toPlatform);
+        //} else {
             // If ICO phase, all the dividends go to the platform
-            toPlatform = remainingEth.div(100).mul(dividendRate);
-            remainingEth = remainingEth.sub(toPlatform);
-        }
+            //toPlatform = remainingEth.div(100).mul(dividendRate);
+            //remainingEth = remainingEth.sub(toPlatform);
+        //}
 
         
-        tokensBought = ethereumToTokens_(remainingEth);
-        tokenSupply = tokenSupply.add(tokensBought);
+        //tokensBought = ethereumToTokens_(remainingEth);
+        //tokenSupply = tokenSupply.add(tokensBought);
         
         // tokens should be dividended to the other user
-        if (regularPhase) {
-            dividendAmount = tokensBought.mul(dividendRate).div(100);
-            tokensBought = tokensBought.sub(dividendAmount);
-        }
+        //if (regularPhase) {
+            //dividendAmount = tokensBought.mul(dividendRate).div(100);
+            //tokensBought = tokensBought.sub(dividendAmount);
+        //}
 
         //the token user finnally bought
-        dividendTokensBought = tokensBought.mul(dividendRate);
+        //dividendTokensBought = tokensBought.mul(dividendRate);
         
-        currentEthInvested = currentEthInvested.add(remainingEth);
+        //currentEthInvested = currentEthInvested.add(remainingEth);
 
         // If ICO phase, all the dividends go to the platform
-        if (icoPhase) {
-            toReferrer = 0;
-            toTokenHolders = 0;
+        //if (icoPhase) {
+            //toReferrer = 0;
+            //toTokenHolders = 0;
 
             /* ethInvestedDuringICO tracks how much Ether goes straight to tokens,
                not how much Ether we get total.
                this is so that our calculation using "investment" is accurate. */
-            ethInvestedDuringICO = ethInvestedDuringICO + remainingEth;
-            tokensMintedDuringICO = tokensMintedDuringICO + tokensBought;
+            //ethInvestedDuringICO = ethInvestedDuringICO + remainingEth;
+            //tokensMintedDuringICO = tokensMintedDuringICO + tokensBought;
 
             // Cannot purchase more than the hard cap during ICO.
-            require(ethInvestedDuringICO <= icoHardCap);
+            //require(ethInvestedDuringICO <= icoHardCap);
             // Contracts aren't allowed to participate in the ICO.
-            require(tx.origin == msg.sender);
+            //require(tx.origin == msg.sender);
 
             // Cannot purchase more then the limit per address during the ICO.
-            ICOBuyIn[msg.sender] += remainingEth;
-            require(ICOBuyIn[msg.sender] <= addressICOLimit);
+            //ICOBuyIn[msg.sender] += remainingEth;
+            //require(ICOBuyIn[msg.sender] <= addressICOLimit);
 
             // Stop the ICO phase if we reach the hard cap
-            if (ethInvestedDuringICO == icoHardCap) {
-                icoPhase = false;
-            }
+            //if (ethInvestedDuringICO == icoHardCap) {
+                //icoPhase = false;
+            //}
 
-        } else {
+        //} else {
             // Not ICO phase, check for referrals
 
             // 30% goes to referrers, if set
             // toReferrer = (dividends * 30)/100
-            if (_referredBy != 0x0000000000000000000000000000000000000000 &&
-            _referredBy != msg.sender &&
-            frontTokenBalanceLedger[_referredBy] >= stakingRequirement)
-            {
-                toReferrer = (dividendAmount.mul(referrer_percentage)).div(100);
-                frontTokenBalanceLedger[_referredBy] = frontTokenBalanceLedger[_referredBy].add(toReferrer);
-                emit Referral(_referredBy, toReferrer);
-            }
+            //if (_referredBy != 0x0000000000000000000000000000000000000000 &&
+            //_referredBy != msg.sender &&
+            //frontTokenBalanceLedger[_referredBy] >= stakingRequirement)
+            //{
+                //toReferrer = (dividendAmount.mul(referrer_percentage)).div(100);
+                //frontTokenBalanceLedger[_referredBy] = frontTokenBalanceLedger[_referredBy].add(toReferrer);
+               // emit Referral(_referredBy, toReferrer);
+            //}
 
             // wj read again!!
 
             // The rest of the dividends go to token holders
-            toTokenHolders = (dividendAmount.mul(user_percentage)).div(100);
-            toPlatformToken = (dividendAmount.sub(toReferrer)).sub(toTokenHolders);
+            //toTokenHolders = (dividendAmount.mul(user_percentage)).div(100);
+            //toPlatformToken = (dividendAmount.sub(toReferrer)).sub(toTokenHolders);
 
-            dividendTotalToken = dividendTotalToken.add(toTokenHolders);
+            //dividendTotalToken = dividendTotalToken.add(toTokenHolders);
 
             // wj the really fee is = dividendTokensBought * (toTokenHolders * magnitude / (divTokenSupply))?
-            fee = toTokenHolders * magnitude;
-            fee = fee - (fee - (dividendTokensBought * (toTokenHolders * magnitude / (divTokenSupply))));
+            //fee = toTokenHolders * magnitude;
+            //fee = fee - (fee - (dividendTokensBought * (toTokenHolders * magnitude / (divTokenSupply))));
 
             // Finally, increase the divToken value
-            profitPerDivToken = profitPerDivToken.add((toTokenHolders.mul(magnitude)).div(divTokenSupply));
-            payoutsTo_[msg.sender] += (int256) ((profitPerDivToken * dividendTokensBought) - fee);
-        }
+            //profitPerDivToken = profitPerDivToken.add((toTokenHolders.mul(magnitude)).div(divTokenSupply));
+            //payoutsTo_[msg.sender] += (int256) (profitPerDivToken * dividendTokensBought);
+        //}
 
         // Update the buyer's token amounts
-        frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(tokensBought);
-        dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].add(dividendTokensBought);
+        //frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(tokensBought);
+        //dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].add(dividendTokensBought);
 
-        addOrUpdateHolder(msg.sender);
+        //addOrUpdateHolder(msg.sender);
 
         // Transfer to platform
-        if (toPlatform != 0) {platformAddress.transfer(toPlatform);}
-        if (toPlatformToken != 0) {frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(toPlatformToken);}
-
-        // TODO wj last parameter should be _referredBy
-        emit onTokenPurchase(msg.sender, _incomingEthereum, userDividendRate[msg.sender], tokensBought, tokenPrice, _referredBy);
+        //if (toPlatform != 0) {platformAddress.transfer(toPlatform);}
+        //if (toPlatformToken != 0) {frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(toPlatformToken);}
 
         // checking
-        uint sum = toPlatform + remainingEth - _incomingEthereum;
-        assert(sum == 0);
-        sum = toPlatformToken + toReferrer + toTokenHolders - tokensBought;
-        assert(sum == 0);
+       // uint sum = toPlatform + remainingEth - _incomingEthereum;
+       // assert(sum == 0);
+       // sum = toPlatformToken + toReferrer + toTokenHolders - tokensBought;
+       // assert(sum == 0);
+
+        emit OnTokenPurchase(msg.sender, _incomingEthereum, tokensBought, tokenPrice, dividendRate, _referredBy);
     }
 
     // How many tokens one gets from a certain amount of ethereum.
@@ -1296,6 +1290,10 @@ contract Skcoin {
     function transferFromInternal(address _from, address _toAddress, uint _amountOfTokens, bytes _data)
     internal
     {
+        // wj delete _data
+        if(_data.length != 0) {
+            return;
+        }
         require(regularPhase);
         require(_toAddress != address(0x0));
         address _customerAddress = _from;
@@ -1356,9 +1354,8 @@ contract Skcoin {
         _customerAddress.transfer(_dividends);
 
         // Fire logging event.
-        emit onWithdraw(_customerAddress, _dividends);
+        emit OnWithdraw(_customerAddress, _dividends);
     }
-
 
     /*=======================
      =    RESET FUNCTIONS   =
@@ -1411,9 +1408,6 @@ contract Skcoin {
  =     INTERFACES       =
  ======================*/
 
-contract Bankroll {
-    function redeem(address _caller, uint256 _amount) public returns (bool) {}
-}
 
 library SafeMath {
 
@@ -1442,3 +1436,8 @@ library SafeMath {
         return c;
     }
 }
+
+/** Note
+ * 1.平台获取的Token需要参与分成
+ * 2.支持用户手动提取分成，统一分成时就没有
+ */
