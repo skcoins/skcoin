@@ -49,7 +49,6 @@ contract BankRoll {
         skcAddress = _skcAddress;
     }
 
-    //SKC换积分 METAMASK调用
     function tokenToPointByMetaMask(uint256 _id, uint256 _amount)
     public
     returns (bool)
@@ -57,7 +56,6 @@ contract BankRoll {
         return tokenToPoint(_id, msg.sender, _amount);
     }
 
-    //SKC换积分,SKC合约调用
     function tokenToPointBySkcContract(uint256 _id, address _recharger, uint256 _amount)
     public
     onlySkcContract
@@ -66,38 +64,27 @@ contract BankRoll {
         return tokenToPoint(_id, _recharger, _amount);
     }
 
-    //SKC换积分
-    function tokenToPoint(uint256 _id, address _recharger, uint256 _amount)
+       function tokenToPoint(uint256 _id, address _recharger, uint256 _amount)
     internal
     returns (bool)
     {
-        bool isSuccess = skcAddress.call(bytes4(keccak256("redeemGamePoints(uint256, address, uint256)")), _id, msg.sender, _amount);
+        bool isSuccess = skcAddress.call(bytes4(keccak256("redeemGamePoints(address, uint256)")), msg.sender, _amount);
         assert(!isSuccess);
         emit tokenToPointEvent(_id, _recharger, _amount);
         return true;
     }
 
-
-
-     //积分换SKC
      function pointToToken(uint256 _id, address _withdrawer, uint256 _amount)
      public
      onlyAdministrator
      returns (bool)
      {
-         //bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
-         //assert(!isSuccess);
+         bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
+         assert(!isSuccess);
          emit pointToTokenEvent(_id, _withdrawer, _amount);
          return true;
      }
 
-
-    //更新账本
-    //说明:
-    //1.后台调用,只能管理员进行调用
-    //2.游戏平台会进行结算清算分红，按积分方式发放，自动或者手动进行兑换SKC。
-    //3.只需要记录最终的用户积分明细。
-    //4.每次最多500条
     function updateLedger(uint256 _id, address[] _address, uint256[] _oldPionts, uint256[] _newPoints)
     public
     onlyAdministrator
