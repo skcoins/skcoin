@@ -39,9 +39,6 @@ contract Skcoin {
     mapping(address => uint))     public allowed;
     mapping(address => bool)      public administrators; //管理员列表
 
-    bytes32 constant              public icoHashedPass = bytes32(0x5ddcde33b94b19bdef79dd9ea75be591942b9ec78286d64b44a356280fb6a262);
-
-    address internal                     reserveAddress; //Ether储备金地址
     address internal                     platformAddress; //平台的收益地址
     address internal                     bankrollAddress;
 
@@ -52,7 +49,6 @@ contract Skcoin {
 
     mapping(address => uint)    internal frontTokenBalanceLedger; // token bought total
     mapping(address => uint)    internal dividendTokenBalanceLedger_; //分红账本
-    mapping(address => uint)    internal referralBalance_; //推荐账本
     mapping(address => uint)    internal ICOBuyIn; //ICO认购记录账本
 
     mapping(uint8 => bool)      internal validDividendRates; //预设的分红比率
@@ -147,11 +143,6 @@ contract Skcoin {
         uint tokensMinted
     );
 
-    event OnWithdraw(
-        address indexed customerAddress,
-        uint ethereumWithdrawn
-    );
-
     /*
     * Token转帐
     */
@@ -170,18 +161,11 @@ contract Skcoin {
         uint tokens //授权的Token数量
     );
 
-    event Allocation(
-        uint toBankRoll,
-        uint toReferrer,
-        uint toTokenHolders,
-        uint forTokens
-    );
-
     /**
      * 记录推荐人的推荐奖励
      */
     event Referral(
-        address referrerBy, //引荐人
+        address indexed referrerBy, //引荐人
         address referrer, //被引荐人
         uint amountReceived //引荐奖励SKC数
     );
@@ -365,6 +349,7 @@ contract Skcoin {
     public
     onlyAdministrator
     {
+        require(regularPhase);
         if(dividendTotalToken == 0) {
             return;
         }
@@ -413,11 +398,6 @@ contract Skcoin {
         require(icoPhase || regularPhase);
 
         if (icoPhase) {
-
-            // Anti-bot measures - not perfect, but should help some.
-            //bytes32 hashProvidedPass = keccak256(providedUnhashedPass);
-            //require(hashProvidedPass == icoHashedPass);
-
             uint gasPrice = tx.gasprice;
 
             // Prevents ICO buyers from getting substantially burned if the ICO is reached
@@ -882,17 +862,18 @@ contract Skcoin {
     =            INTERNAL FUNCTIONS            =
     ==========================================*/
 
-    /* Purchase tokens with Ether.
-       During ICO phase, dividends should go to the bankroll
-       During normal operation:
-         0.5% should go to the master dividend card
-         0.5% should go to the matching dividend card
-         25% of dividends should go to the referrer, if any is provided. */
+    /* Purchase tokens with Ether. */
     function purchaseTokens(uint _incomingEthereum, address _referredBy)
     internal
     returns (uint)
     {
         require(_incomingEthereum >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
+        
+        if(icoPhase)
+        {
+            purchaseICOTokens(_incomingEthereum, _referredBy);
+            return;
+        }
         
         uint tokensBought;
         uint toPlatform;
@@ -916,6 +897,8 @@ contract Skcoin {
     internal
     returns (uint)
     {
+        require(_incomingEthereum >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
+        require(icoPhase);
         uint toPlatform;
         uint tokensBought;
         uint remainingEth = _incomingEthereum;
@@ -968,6 +951,8 @@ contract Skcoin {
     internal
     returns (uint)
     {
+        require(regularPhase);
+
         uint toReferrer;
         uint toTokenHolders;
         uint toPlatform;
