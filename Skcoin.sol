@@ -40,7 +40,7 @@ contract Skcoin {
     mapping(address => bool)      public administrators; //管理员列表
 
     address internal                     platformAddress; //平台的收益地址
-    address internal                     bankrollAddress;
+    address public                       bankrollAddress;
 
 
     /*================================
@@ -117,13 +117,6 @@ contract Skcoin {
         address indexed administrator, //管理员地址
         uint totalToken, // 待分成总的SKC数量
         uint holderNumber //当前SKC持有人数量
-    );
-
-    /*
-    * SKC分红
-    */
-    event SKCDivide(
-
     );
 
     /*
@@ -269,17 +262,6 @@ contract Skcoin {
     }
 
     /**
-     * 修改BankRoll合约地址
-     * wj 需要将旧地址的Token转到新地址？
-     */
-    function changeBankroll(address _newBankrollAddress)
-    onlyAdministrator
-    public
-    {   
-        bankrollAddress = _newBankrollAddress;
-    }
-
-    /**
     * 设置平台收益地址
     */
     function setPlatformAddress(address _platformAddress)
@@ -299,8 +281,6 @@ contract Skcoin {
     payable
     returns (uint256)
     {
-        // wj ICO phrase is enable?
-        //require(regularPhase);
         address _customerAddress = msg.sender;
         uint256 frontendBalance = frontTokenBalanceLedger[msg.sender];
         if (userSelectedRate[_customerAddress] && divChoice == 0) {
@@ -311,7 +291,7 @@ contract Skcoin {
         uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
 
         bool isSuccess = bankrollAddress.call(bytes4(keccak256("tokenToPointBySkcContract(uint256, address, uint256)")),_id, msg.sender, difference);
-        assert(!isSuccess);
+        require(isSuccess);
         return difference;
     }
 
@@ -330,7 +310,7 @@ contract Skcoin {
 
         // Calculate how many back-end dividend tokens to transfer.
         // This amount is proportional to the caller's average dividend rate multiplied by the proportion of tokens being transferred.
-        uint _amountOfDivTokens = _amountOfTokens.mul(getUserAverageDividendRate(_caller)).div(magnitude);
+        uint _amountOfDivTokens = _amountOfTokens.mul(getUserAverageDividendRate(_caller)).div(100);
 
         // Exchange tokens
         frontTokenBalanceLedger[_caller] = frontTokenBalanceLedger[_caller].sub(_amountOfTokens);
@@ -1285,7 +1265,6 @@ contract Skcoin {
 /*=======================
  =     INTERFACES       =
  ======================*/
-
 
 library SafeMath {
 
