@@ -48,6 +48,7 @@ contract Skcoin {
      ================================*/
 
     mapping(address => uint)    internal frontTokenBalanceLedger; // token bought total
+    mapping(address => uint)    internal referralLedger; //推荐账本
     mapping(address => uint)    internal dividendTokenBalanceLedger_; //分红账本
     mapping(address => uint)    internal ICOBuyIn; //ICO认购记录账本
 
@@ -161,6 +162,25 @@ contract Skcoin {
         address indexed referrerBy, //引荐人
         address referrer, //被引荐人
         uint amountReceived //引荐奖励SKC数
+    );
+
+    /**
+     * 记录推荐人分红和Token holder 分红
+     */
+    event AssetsDetail(
+        address indexed buyer, //购买者
+        address referrer, //代理人
+        uint referrerToken, //代理人分红
+        uint tokenHolder //股东分红
+    );
+
+    /**
+     * 记录推荐人分红和Token holder 分红
+     */
+    event DividendDetail(
+        address indexed customerAddress, //
+        uint referrerToken, //代理人分红
+        uint tokenHolder //股东分红
     );
 
     /*=======================================
@@ -330,20 +350,33 @@ contract Skcoin {
     onlyAdministrator
     {
         require(regularPhase);
-        if(dividendTotalToken == 0) {
-            return;
-        }
 
         uint _dividendTotalToken = dividendTotalToken;
         uint allToken;
         for (uint i = 0; i < holders.length; i++) {
             address holder = holders[i];
+            uint reciveToken = 0; 
             if(frontTokenBalanceLedger[holder] > 0) {
-                uint reciveToken = dividendTotalToken.mul(dividendTokenBalanceLedger_[holder]).div(divTokenSupply);
+                reciveToken = dividendTotalToken.mul(dividendTokenBalanceLedger_[holder]).div(divTokenSupply);
                 uint dividendToken = reciveToken.mul(dividendTokenBalanceLedger_[holder]).div(divTokenSupply);
+                divTokenSupply = divTokenSupply.add(dividendToken);
                 frontTokenBalanceLedger[holder] = frontTokenBalanceLedger[holder].add(reciveToken);
                 dividendTokenBalanceLedger_[holder] = dividendTokenBalanceLedger_[holder].add(dividendToken);
                 allToken += reciveToken;
+            }
+
+            uint toReferral = referralLedger[holder];
+            if(reciveToken != 0 || toReferral > 0) {
+                uint referralDividendToken = toReferral.mul(dividendTokenBalanceLedger_[holder]).div(divTokenSupply);
+                referralLedger[holder] = 0;
+
+                divTokenSupply = divTokenSupply.add(referralDividendToken);
+                frontTokenBalanceLedger[holder] = frontTokenBalanceLedger[holder].add(toReferral);
+                dividendTokenBalanceLedger_[holder] = dividendTokenBalanceLedger_[holder].add(referralDividendToken);
+            }
+
+            if(reciveToken != 0 || toReferral > 0) {
+                emit DividendDetail(holder, toReferral, reciveToken);
             }
         }
 
@@ -440,7 +473,7 @@ contract Skcoin {
         }
         uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
         transferTo(msg.sender, target, difference);
-    }
+    }   
 
     // Fallback function only works during regular phase - part of anti-bot protection.
     function()
@@ -974,7 +1007,7 @@ contract Skcoin {
         frontTokenBalanceLedger[_referredBy] >= stakingRequirement)
         {
             toReferrer = (dividendTokenAmount.mul(referrer_percentage)).div(100);
-            frontTokenBalanceLedger[_referredBy] = frontTokenBalanceLedger[_referredBy].add(toReferrer);
+            referralLedger[_referredBy] = referralLedger[_referredBy].add(toReferrer);
             emit Referral(_referredBy, msg.sender, toReferrer);
         }
         toTokenHolders = (dividendTokenAmount.mul(user_percentage)).div(100);
@@ -996,6 +1029,8 @@ contract Skcoin {
         assert(sum == 0);
         sum = toPlatformToken + toReferrer + toTokenHolders + userTokensBought - tokensBought;
         assert(sum == 0);
+
+        emit AssetsDetail(msg.sender, _referredBy, toReferrer, toTokenHolders);
     }
 
     // How many tokens one gets from a certain amount of ethereum.
