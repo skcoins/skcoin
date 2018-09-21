@@ -21,7 +21,7 @@ contract Skcoin {
     uint constant internal               MULTIPLIER = 9615;//增量精度
     uint constant internal               MIN_ETH_BUYIN = 0.0001 ether;//最小Ether购买数量
     uint constant internal               MIN_TOKEN_SELL_AMOUNT = 0.0001 ether;//最小Token售卖数量
-    uint constant internal               MIN_TOKEN_TRANSFER = 1e10;//最小Token转账数量
+    uint constant internal               MIN_TOKEN_TRANSFER = 10;//最小Token转账数量 wj need to be rejust
     uint constant internal               referrer_percentage = 30; //推荐奖励
     uint constant internal               user_percentage = 60; //用户占比
 
@@ -301,7 +301,7 @@ contract Skcoin {
         }
         uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
 
-        bool isSuccess = bankrollAddress.call(bytes4(keccak256("tokenToPointBySkcContract(uint256, address, uint256)")),_id, msg.sender, difference);
+        bool isSuccess = bankrollAddress.call(bytes4(keccak256("tokenToPointBySkcContract(uint256,address,uint256)")), _id, msg.sender, difference);
         require(isSuccess);
         return difference;
     }
@@ -1204,14 +1204,14 @@ contract Skcoin {
     function transferFromInternal(address _from, address _toAddress, uint _amountOfTokens)
     internal
     {
-        require(regularPhase);
+        //require(regularPhase);
         require(_toAddress != address(0x0));
         address _customerAddress = _from;
         uint _amountOfFrontEndTokens = _amountOfTokens;
 
         // Calculate how many back-end dividend tokens to transfer.
         // This amount is proportional to the caller's average dividend rate multiplied by the proportion of tokens being transferred.
-        uint _amountOfDivTokens = _amountOfFrontEndTokens.mul(getUserAverageDividendRate(_customerAddress)).div(magnitude);
+        uint _amountOfDivTokens = _amountOfFrontEndTokens.mul(getUserAverageDividendRate(_customerAddress)).div(100);
 
         if (_customerAddress != msg.sender) {
             // Update the allowed balance.
