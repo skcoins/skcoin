@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity ^0.4.23;
 
 
 contract Skcoin {
@@ -35,7 +35,7 @@ contract Skcoin {
     string public                        symbol = "SKY";  //缩写
     uint   internal                      tokenSupply = 0; //供应量
 
-    mapping(address => 
+    mapping(address =>
     mapping(address => uint))     public allowed;
     mapping(address => bool)      public administrators; //管理员列表
 
@@ -153,15 +153,6 @@ contract Skcoin {
         address indexed tokenOwner, //Token的原来持有者
         address indexed spender, //被授权人，可以花费tokenOwner授权数量的Token
         uint tokens //授权的Token数量
-    );
-
-    /**
-     * 记录推荐人的推荐奖励
-     */
-    event Referral(
-        address indexed referrerBy, //引荐人
-        address referrer, //被引荐人
-        uint amountReceived //引荐奖励SKC数
     );
 
     /**
@@ -355,7 +346,7 @@ contract Skcoin {
         uint allToken;
         for (uint i = 0; i < holders.length; i++) {
             address holder = holders[i];
-            uint reciveToken = 0; 
+            uint reciveToken = 0;
             if(frontTokenBalanceLedger[holder] > 0) {
                 reciveToken = dividendTotalToken.mul(dividendTokenBalanceLedger_[holder]).div(divTokenSupply);
                 uint dividendToken = reciveToken.mul(dividendTokenBalanceLedger_[holder]).div(divTokenSupply);
@@ -387,7 +378,7 @@ contract Skcoin {
         emit Divide(msg.sender, _dividendTotalToken, holders.length);
     }
 
-    function addOrUpdateHolder(address _holderAddr) 
+    function addOrUpdateHolder(address _holderAddr)
     internal
     {
         // Check and add holder to array
@@ -399,7 +390,7 @@ contract Skcoin {
 
     /**
      * ETH购买SKC，并设置选择的股息率
-     * Same as buy, but explicitly sets your dividend percentage.   
+     * Same as buy, but explicitly sets your dividend percentage.
      * If this has been called before, it will update your `default' dividend
      *   percentage for regular buy transactions going forward.
      */
@@ -446,7 +437,7 @@ contract Skcoin {
         purchaseTokens(msg.value, _referredBy);
     }
 
-    /** 
+    /**
      * ETH购买SKC后，将SKC转账给target账户
      */
     function buyAndTransfer(address _referredBy, address target)
@@ -456,7 +447,7 @@ contract Skcoin {
         buyAndTransfer(_referredBy, target, 20);
     }
 
-    /** 
+    /**
      * ETH购买SKC后，将SKC转账给target账户
      */
     function buyAndTransfer(address _referredBy, address target, uint8 divChoice)
@@ -473,7 +464,7 @@ contract Skcoin {
         }
         uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
         transferTo(msg.sender, target, difference);
-    }   
+    }
 
     // Fallback function only works during regular phase - part of anti-bot protection.
     function()
@@ -695,7 +686,7 @@ contract Skcoin {
         administrators[_newAdmin] = _status;
     }
 
-    /** 
+    /**
     * 设置能够获取推荐费的最小持币数量
     */
     function setStakingRequirement(uint _amountOfTokens)
@@ -881,13 +872,13 @@ contract Skcoin {
     returns (uint)
     {
         require(_incomingEthereum >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
-        
+
         if(icoPhase)
         {
             purchaseICOTokens(_incomingEthereum, _referredBy);
             return;
         }
-        
+
         uint tokensBought;
         uint toPlatform;
         uint8 dividendRate = userDividendRate[msg.sender];
@@ -904,7 +895,7 @@ contract Skcoin {
         purchaseRegularPhaseTokens(_incomingEthereum, _referredBy);
 
         emit OnTokenPurchase(msg.sender, _incomingEthereum, tokensBought, tokenPrice, dividendRate, _referredBy);
-    }   
+    }
 
     function purchaseICOTokens(uint _incomingEthereum, address _referredBy)
     internal
@@ -922,7 +913,7 @@ contract Skcoin {
 
         tokensBought = ethereumToTokens_(remainingEth);
         tokenSupply = tokenSupply.add(tokensBought);
-        
+
         currentEthInvested = currentEthInvested.add(remainingEth);
 
         /* ethInvestedDuringICO tracks how much Ether goes straight to tokens,
@@ -1008,7 +999,6 @@ contract Skcoin {
         {
             toReferrer = (dividendTokenAmount.mul(referrer_percentage)).div(100);
             referralLedger[_referredBy] = referralLedger[_referredBy].add(toReferrer);
-            emit Referral(_referredBy, msg.sender, toReferrer);
         }
         toTokenHolders = (dividendTokenAmount.mul(user_percentage)).div(100);
         toPlatformToken = (dividendTokenAmount.sub(toReferrer)).sub(toTokenHolders);
