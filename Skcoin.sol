@@ -10,7 +10,7 @@ contract Skcoin {
 
     uint8 constant public                decimals = 18;//精度
 
-    uint constant internal               tokenPriceInitial_ = 0.000653 ether;//SKC初始价
+    uint constant internal               TOKEN_PRICE_INITIAL = 0.000653 ether;//SKC初始价
     uint constant internal               magnitude = 2 ** 64;//量级精度
 
     uint constant internal               icoHardCap = 250 ether;//ICO硬顶
@@ -25,7 +25,7 @@ contract Skcoin {
     uint constant internal               referrer_percentage = 30; //推荐奖励
     uint constant internal               user_percentage = 60; //用户占比
 
-    uint public                          stakingRequirement = 100e18; // 持币数量大于stakingRequirement才能获取推荐费
+    uint public                          stakingRequirement = 100e18; // 推荐人获取推荐费最小持币数量
 
     /*================================
      =          CONFIGURABLES         =
@@ -35,12 +35,11 @@ contract Skcoin {
     string public                        symbol = "SKC";  //缩写
     uint   internal                      tokenSupply = 0; //供应量
 
-    mapping(address =>
-    mapping(address => uint))     public allowed;
+    mapping(address => mapping(address => uint))     public allowed; //预授权列表
     mapping(address => bool)      public administrators; //管理员列表
 
     address internal                     platformAddress; //平台的收益地址
-    address public                       bankrollAddress;
+    address public                       bankrollAddress; //游戏的资金地址
 
 
     /*================================
@@ -65,8 +64,8 @@ contract Skcoin {
     uint    internal                     divTokenSupply = 0; //参与分红的Token数量
     uint256 internal                     dividendTotalToken; //本轮分红Token数量
 
-    bool    public                       icoPhase = false; //是否是ICO阶段
-    bool    public                       regularPhase = false;
+    // bool    public                       icoPhase = false; //是否是ICO阶段
+    bool    public                       regularPhase = false; // true-正常阶段，false-ICO阶段
     uint                                 icoOpenTime;//ICO开始时间
 
     /*=================================
@@ -255,7 +254,7 @@ contract Skcoin {
     function allHolders()
     public
     view
-    returns ()
+    returns (address[])
     {
         return holders;
     }
@@ -397,9 +396,9 @@ contract Skcoin {
     payable
     returns (uint)
     {
-        require(icoPhase || regularPhase);
+        // require(icoPhase || regularPhase);
 
-        if (icoPhase) {
+        if (!regularPhase) {
             uint gasPrice = tx.gasprice;
 
             // Prevents ICO buyers from getting substantially burned if the ICO is reached
@@ -508,7 +507,7 @@ contract Skcoin {
     public
     {
         // No selling during the ICO. You don't get to flip that fast, sorry!
-        require(!icoPhase);
+        // require(!icoPhase);
         require(regularPhase);
 
         require(_amountOfTokens <= frontTokenBalanceLedger[msg.sender]);
@@ -632,7 +631,7 @@ contract Skcoin {
     {
         require(now > (icoOpenTime + 2 weeks) && icoOpenTime != 0);
 
-        icoPhase = false;
+       // icoPhase = false;
         regularPhase = true;
     }
 
@@ -649,7 +648,8 @@ contract Skcoin {
     {
         // Prevent us from startaring the ICO phase again
         require(icoOpenTime == 0);
-        icoPhase = true;
+        // icoPhase = true;
+        regularPhase = false;
         icoOpenTime = now;
     }
 
@@ -669,7 +669,7 @@ contract Skcoin {
     public
     {
         // disable ico phase in case if that was not disabled yet
-        icoPhase = false;
+        // icoPhase = false;
         regularPhase = true;
     }
 
@@ -770,8 +770,8 @@ contract Skcoin {
     {
         uint price;
 
-        if (icoPhase || currentEthInvested < ethInvestedDuringICO) {
-            price = tokenPriceInitial_;
+        if (!regularPhase || currentEthInvested < ethInvestedDuringICO) {
+            price = TOKEN_PRICE_INITIAL;
         } else {
 
             // Calculate the tokens received for 100 finney.
@@ -798,8 +798,8 @@ contract Skcoin {
     {
         uint price;
 
-        if (icoPhase || currentEthInvested < ethInvestedDuringICO) {
-            price = tokenPriceInitial_;
+        if (!regularPhase || currentEthInvested < ethInvestedDuringICO) {
+            price = TOKEN_PRICE_INITIAL;
         } else {
 
             // Calculate the tokens received for 100 finney.
@@ -871,8 +871,7 @@ contract Skcoin {
     {
         require(_incomingEther >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
 
-        if(icoPhase)
-        {
+        if(!regularPhase) {
             purchaseICOTokens(_incomingEther, _referredBy);
             return;
         }
@@ -900,7 +899,7 @@ contract Skcoin {
     returns (uint)
     {
         require(_incomingEther >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
-        require(icoPhase);
+        require(!regularPhase);
         uint toPlatform;
         uint tokensBought;
         uint remainingEth = _incomingEther;
@@ -931,7 +930,8 @@ contract Skcoin {
 
         // Stop the ICO phase if we reach the hard cap
         if (ethInvestedDuringICO == icoHardCap) {
-            icoPhase = false;
+            // icoPhase = false;
+            regularPhase = true;
         }
 
         // Update the buyer's token amounts
@@ -946,7 +946,7 @@ contract Skcoin {
         uint sum = toPlatform + remainingEth - _incomingEther;
         assert(sum == 0);
 
-        emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, tokenPriceInitial_, 0, _referredBy);
+        emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, TOKEN_PRICE_INITIAL, 0, _referredBy);
     }
 
     function purchaseRegularPhaseTokens(uint _incomingEther, address _referredBy)
@@ -1032,8 +1032,8 @@ contract Skcoin {
     {
         require(_etherAmount > MIN_ETH_BUYIN, "Tried to buy tokens with too little eth.");
 
-        if (icoPhase) {
-            return _etherAmount.div(tokenPriceInitial_) * 1e18;
+        if (!regularPhase) {
+            return _etherAmount.div(TOKEN_PRICE_INITIAL) * 1e18;
         }
 
         /*
@@ -1079,7 +1079,7 @@ contract Skcoin {
         // Now calculate each one per the above formulas.
         // Note: since tokens have 18 decimals of precision we multiply the result by 1e18.
         if (ethTowardsICOPriceTokens != 0) {
-            icoPriceTokens = ethTowardsICOPriceTokens.mul(1e18).div(tokenPriceInitial_);
+            icoPriceTokens = ethTowardsICOPriceTokens.mul(1e18).div(TOKEN_PRICE_INITIAL);
         }
 
         if (ethTowardsVariablePriceTokens != 0) {
@@ -1174,7 +1174,7 @@ contract Skcoin {
                we will be passed in an amount of tokens to sell that's already at the 18-decimal precision.
                We need to divide by 1e18 or we'll have too much Ether. */
 
-            ethFromICOPriceTokens = tokensToSellAtICOPrice.mul(tokenPriceInitial_).div(1e18);
+            ethFromICOPriceTokens = tokensToSellAtICOPrice.mul(TOKEN_PRICE_INITIAL).div(1e18);
         }
 
         if (tokensToSellAtVariablePrice != 0) {
