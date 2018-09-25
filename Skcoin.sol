@@ -638,7 +638,6 @@ contract Skcoin {
     /*----------  ADMINISTRATOR ONLY FUNCTIONS  ----------*/
 
 
-    // Fire the starting gun and then duck for cover.
     /**
      * 开启ICO阶段
      */
@@ -646,14 +645,12 @@ contract Skcoin {
     onlyAdministrator()
     public
     {
-        // Prevent us from startaring the ICO phase again
         require(icoOpenTime == 0);
         // icoPhase = true;
         regularPhase = false;
         icoOpenTime = now;
     }
 
-    // Fire the ... ending gun?
     /**
      * 结束ICO阶段
      */
@@ -661,7 +658,8 @@ contract Skcoin {
     onlyAdministrator()
     public
     {
-        icoPhase = false;
+        //icoPhase = false;
+        regularPhase = true;
     }
 
     function startRegularPhase()
