@@ -10,7 +10,7 @@ contract Skcoin {
 
     uint8 constant public                decimals = 18;//精度
 
-    uint constant internal               tokenPriceInitial_ = 0.000653 ether;//SKY初始价
+    uint constant internal               tokenPriceInitial_ = 0.000653 ether;//SKC初始价
     uint constant internal               magnitude = 2 ** 64;//量级精度
 
     uint constant internal               icoHardCap = 250 ether;//ICO硬顶
@@ -32,7 +32,7 @@ contract Skcoin {
      ================================*/
 
     string public                        name = "Skcoin"; //名称
-    string public                        symbol = "SKY";  //缩写
+    string public                        symbol = "SKC";  //缩写
     uint   internal                      tokenSupply = 0; //供应量
 
     mapping(address =>
@@ -160,9 +160,9 @@ contract Skcoin {
      */
     event AssetsDetail(
         address indexed buyer, //购买者
-        address referrer, //代理人
-        uint referrerToken, //代理人分红
-        uint tokenHolder //股东分红
+        address referrer, //推荐人
+        uint referrerToken, //推荐人分红
+        uint tokenHolder //持币者分红
     );
 
     /**
@@ -170,8 +170,8 @@ contract Skcoin {
      */
     event DividendDetail(
         address indexed customerAddress, //
-        uint referrerToken, //代理人分红
-        uint tokenHolder //股东分红
+        uint referrerToken, //推荐人分红
+        uint tokenHolder //持币者分红
     );
 
     /*=======================================
@@ -229,15 +229,13 @@ contract Skcoin {
 
     /**
      * 调用者的SKC余额
-     * Retrieve the frontend tokens owned by the caller
      */
     function myFrontEndTokens()
     public
     view
     returns (uint)
     {
-        address _customerAddress = msg.sender;
-        return balanceOf(_customerAddress);
+        return balanceOf(msg.sender);
     }
 
     /**
@@ -257,13 +255,13 @@ contract Skcoin {
     function allHolders()
     public
     view
-    returns (address[])
+    returns ()
     {
         return holders;
     }
 
     /*
-    * 设置BankROll合约地址
+    * 设置Bankroll合约地址
     */
     function setBankrollAddress(address _bankrollAddress)
     public
@@ -501,7 +499,7 @@ contract Skcoin {
     }
 
     // Sells front-end tokens.
-    // Logic concerning step-pricing of tokens pre/post-ICO is encapsulated in tokensToEthereum_.
+    // Logic concerning step-pricing of tokens pre/post-ICO is encapsulated in tokensToEther_.
     /**
      * 将Token卖成ETH
      */
@@ -529,13 +527,13 @@ contract Skcoin {
         require((2 * magnitude) <= userDivRate && (50 * magnitude) >= userDivRate);
         uint _divTokensToBurn = (_frontEndTokensToBurn.mul(userDivRate)).div(magnitude);
 
-        // Calculate ethereum received before dividends
-        uint _ethereum = tokensToEthereum_(_frontEndTokensToBurn);
+        // Calculate ether received before dividends
+        uint _ether = tokensToEther_(_frontEndTokensToBurn);
 
-        if (_ethereum > currentEthInvested) {
+        if (_ether > currentEthInvested) {
             // Well, congratulations, you've emptied the coffers.
             currentEthInvested = 0;
-        } else {currentEthInvested = currentEthInvested - _ethereum;}
+        } else {currentEthInvested = currentEthInvested - _ether;}
 
         // Burn the sold tokens (both front-end and back-end variants).
         tokenSupply = tokenSupply.sub(_frontEndTokensToBurn);
@@ -545,12 +543,12 @@ contract Skcoin {
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].sub(_frontEndTokensToBurn);
         dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].sub(_divTokensToBurn);
 
-        // wj when user sell token, the dividend token that caculate from the average dividend rate will be add to dividendTotalToken
+        // wj when user sell token, the dividend token that calculate from the average dividend rate will be add to dividendTotalToken
         dividendTotalToken += _dividendsToken;
-        msg.sender.transfer(_ethereum);
+        msg.sender.transfer(_ether);
 
         // Fire logging event.
-        emit OnTokenSell(msg.sender, _ethereum, _amountOfTokens, _sellPrice, userDivRate);
+        emit OnTokenSell(msg.sender, _ether, _amountOfTokens, _sellPrice, userDivRate);
     }
 
     /**
@@ -778,7 +776,7 @@ contract Skcoin {
 
             // Calculate the tokens received for 100 finney.
             // Divide to find the average, to calculate the price.
-            uint tokensReceivedForEth = ethereumToTokens_(0.001 ether);
+            uint tokensReceivedForEth = etherToTokens_(0.001 ether);
 
             price = (1e18 * 0.001 ether) / tokensReceivedForEth;
         }
@@ -806,7 +804,7 @@ contract Skcoin {
 
             // Calculate the tokens received for 100 finney.
             // Divide to find the average, to calculate the price.
-            uint tokensReceivedForEth = ethereumToTokens_(0.001 ether);
+            uint tokensReceivedForEth = etherToTokens_(0.001 ether);
 
             price = (1e18 * 0.001 ether) / tokensReceivedForEth;
         }
@@ -820,14 +818,14 @@ contract Skcoin {
     /**
      * 计算当前用一定量的ether能够买到的SKC数量
      */
-    function calculateTokensReceived(uint _ethereumToSpend)
+    function calculateTokensReceived(uint _etherToSpend)
     public
     view
     returns (uint)
     {
-        uint _dividends = (_ethereumToSpend.mul(userDividendRate[msg.sender])).div(100);
-        uint _taxedEthereum = _ethereumToSpend.sub(_dividends);
-        uint _amountOfTokens = ethereumToTokens_(_taxedEthereum);
+        uint _dividends = (_etherToSpend.mul(userDividendRate[msg.sender])).div(100);
+        uint _taxedEther = _etherToSpend.sub(_dividends);
+        uint _amountOfTokens = etherToTokens_(_taxedEther);
         return _amountOfTokens;
     }
 
@@ -836,17 +834,17 @@ contract Skcoin {
     /**
      * 计算当前卖出一定量的SKC能够得到ether的数量
      */
-    function calculateEthereumReceived(uint _tokensToSell)
+    function calculateEtherReceived(uint _tokensToSell)
     public
     view
     returns (uint)
     {
         require(_tokensToSell <= tokenSupply);
-        uint _ethereum = tokensToEthereum_(_tokensToSell);
+        uint _ether = tokensToEther_(_tokensToSell);
         uint userAverageDividendRate = getUserAverageDividendRate(msg.sender);
-        uint _dividends = (_ethereum.mul(userAverageDividendRate).div(100)).div(magnitude);
-        uint _taxedEthereum = _ethereum.sub(_dividends);
-        return _taxedEthereum;
+        uint _dividends = (_ether.mul(userAverageDividendRate).div(100)).div(magnitude);
+        uint _taxedEther = _ether.sub(_dividends);
+        return _taxedEther;
     }
 
     /*
@@ -867,15 +865,15 @@ contract Skcoin {
     ==========================================*/
 
     /* Purchase tokens with Ether. */
-    function purchaseTokens(uint _incomingEthereum, address _referredBy)
+    function purchaseTokens(uint _incomingEther, address _referredBy)
     internal
     returns (uint)
     {
-        require(_incomingEthereum >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
+        require(_incomingEther >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
 
         if(icoPhase)
         {
-            purchaseICOTokens(_incomingEthereum, _referredBy);
+            purchaseICOTokens(_incomingEther, _referredBy);
             return;
         }
 
@@ -883,35 +881,35 @@ contract Skcoin {
         uint toPlatform;
         uint8 dividendRate = userDividendRate[msg.sender];
         uint tokenPrice = buyPrice(userDividendRate[msg.sender]);
-        uint remainingEth = _incomingEthereum;
+        uint remainingEth = _incomingEther;
 
         // 2% for platform is taken off before anything else
         toPlatform = remainingEth.div(100).mul(2);
         remainingEth = remainingEth.sub(toPlatform);
 
         //all token bought
-        tokensBought = ethereumToTokens_(remainingEth);
+        tokensBought = etherToTokens_(remainingEth);
 
-        purchaseRegularPhaseTokens(_incomingEthereum, _referredBy);
+        purchaseRegularPhaseTokens(_incomingEther, _referredBy);
 
-        emit OnTokenPurchase(msg.sender, _incomingEthereum, tokensBought, tokenPrice, dividendRate, _referredBy);
+        emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, tokenPrice, dividendRate, _referredBy);
     }
 
-    function purchaseICOTokens(uint _incomingEthereum, address _referredBy)
+    function purchaseICOTokens(uint _incomingEther, address _referredBy)
     internal
     returns (uint)
     {
-        require(_incomingEthereum >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
+        require(_incomingEther >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
         require(icoPhase);
         uint toPlatform;
         uint tokensBought;
-        uint remainingEth = _incomingEthereum;
+        uint remainingEth = _incomingEther;
 
         // 2% for platform is taken off before anything else
         toPlatform = remainingEth.div(100).mul(2);
         remainingEth = remainingEth.sub(toPlatform);
 
-        tokensBought = ethereumToTokens_(remainingEth);
+        tokensBought = etherToTokens_(remainingEth);
         tokenSupply = tokenSupply.add(tokensBought);
 
         currentEthInvested = currentEthInvested.add(remainingEth);
@@ -945,13 +943,13 @@ contract Skcoin {
         if (toPlatform != 0) {platformAddress.transfer(toPlatform);}
 
         // checking
-        uint sum = toPlatform + remainingEth - _incomingEthereum;
+        uint sum = toPlatform + remainingEth - _incomingEther;
         assert(sum == 0);
 
-        emit OnTokenPurchase(msg.sender, _incomingEthereum, tokensBought, tokenPriceInitial_, 0, _referredBy);
+        emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, tokenPriceInitial_, 0, _referredBy);
     }
 
-    function purchaseRegularPhaseTokens(uint _incomingEthereum, address _referredBy)
+    function purchaseRegularPhaseTokens(uint _incomingEther, address _referredBy)
     internal
     returns (uint)
     {
@@ -968,20 +966,20 @@ contract Skcoin {
         uint tokensBought;
         uint userTokensBought;
 
-        uint remainingEth = _incomingEthereum;
+        uint remainingEth = _incomingEther;
 
         // 2% for platform is taken off before anything else
         toPlatform = remainingEth.div(100).mul(2);
         remainingEth = remainingEth.sub(toPlatform);
 
         //all token bought
-        tokensBought = ethereumToTokens_(remainingEth);
+        tokensBought = etherToTokens_(remainingEth);
 
         dividendETHAmount = remainingEth.mul(userDividendRate[msg.sender]).div(100);
         remainingEth = remainingEth.sub(dividendETHAmount);
 
         //the token user finnally bought
-        userTokensBought = ethereumToTokens_(remainingEth);
+        userTokensBought = etherToTokens_(remainingEth);
 
         dividendTokenAmount = tokensBought.sub(userTokensBought);
 
@@ -1015,7 +1013,7 @@ contract Skcoin {
         addOrUpdateHolder(msg.sender);
 
         // checking
-        uint sum = toPlatform + remainingEth + dividendETHAmount - _incomingEthereum;
+        uint sum = toPlatform + remainingEth + dividendETHAmount - _incomingEther;
         assert(sum == 0);
         sum = toPlatformToken + toReferrer + toTokenHolders + userTokensBought - tokensBought;
         assert(sum == 0);
@@ -1023,19 +1021,19 @@ contract Skcoin {
         emit AssetsDetail(msg.sender, _referredBy, toReferrer, toTokenHolders);
     }
 
-    // How many tokens one gets from a certain amount of ethereum.
+    // How many tokens one gets from a certain amount of ether.
     /**
      * 一定量的ether能换多少SKC，此方法未扣除平台抽成和股息率部分
      */
-    function ethereumToTokens_(uint _ethereumAmount)
+    function etherToTokens_(uint _etherAmount)
     public
     view
     returns (uint)
     {
-        require(_ethereumAmount > MIN_ETH_BUYIN, "Tried to buy tokens with too little eth.");
+        require(_etherAmount > MIN_ETH_BUYIN, "Tried to buy tokens with too little eth.");
 
         if (icoPhase) {
-            return _ethereumAmount.div(tokenPriceInitial_) * 1e18;
+            return _etherAmount.div(tokenPriceInitial_) * 1e18;
         }
 
         /*
@@ -1056,23 +1054,23 @@ contract Skcoin {
 
         if (currentEthInvested >= ethInvestedDuringICO) {
             // Option One: All the ETH goes towards variable-price tokens
-            ethTowardsVariablePriceTokens = _ethereumAmount;
+            ethTowardsVariablePriceTokens = _etherAmount;
 
-        } else if (currentEthInvested < ethInvestedDuringICO && currentEthInvested + _ethereumAmount <= ethInvestedDuringICO) {
+        } else if (currentEthInvested < ethInvestedDuringICO && currentEthInvested + _etherAmount <= ethInvestedDuringICO) {
             // Option Two: All the ETH goes towards ICO-price tokens
-            ethTowardsICOPriceTokens = _ethereumAmount;
+            ethTowardsICOPriceTokens = _etherAmount;
 
-        } else if (currentEthInvested < ethInvestedDuringICO && currentEthInvested + _ethereumAmount > ethInvestedDuringICO) {
+        } else if (currentEthInvested < ethInvestedDuringICO && currentEthInvested + _etherAmount > ethInvestedDuringICO) {
             // Option Three: Some ETH goes towards ICO-price tokens, some goes towards variable-price tokens
             ethTowardsICOPriceTokens = ethInvestedDuringICO.sub(currentEthInvested);
-            ethTowardsVariablePriceTokens = _ethereumAmount.sub(ethTowardsICOPriceTokens);
+            ethTowardsVariablePriceTokens = _etherAmount.sub(ethTowardsICOPriceTokens);
         } else {
             // Option Four: Should be impossible, and compiler should optimize it out of existence.
             revert();
         }
 
         // Sanity check:
-        assert(ethTowardsICOPriceTokens + ethTowardsVariablePriceTokens == _ethereumAmount);
+        assert(ethTowardsICOPriceTokens + ethTowardsVariablePriceTokens == _etherAmount);
 
         // Separate out the number of tokens of each type this will buy:
         uint icoPriceTokens = 0;
@@ -1120,7 +1118,7 @@ contract Skcoin {
     /**
      * 一定量的SKC能换多少Ether，此方法未扣除平台抽成和股息率部分
      */
-    function tokensToEthereum_(uint _tokens)
+    function tokensToEther_(uint _tokens)
     public
     view
     returns (uint)
