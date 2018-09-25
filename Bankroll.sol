@@ -64,12 +64,13 @@ contract BankRoll {
         return tokenToPoint(_id, _recharger, _amount);
     }
 
-       function tokenToPoint(uint256 _id, address _recharger, uint256 _amount)
+    function tokenToPoint(uint256 _id, address _recharger, uint256 _amount)
     internal
     returns (bool)
     {
+        require(_amount>0);
         bool isSuccess = skcAddress.call(bytes4(keccak256("redeemGamePoints(address, uint256)")), msg.sender, _amount);
-        assert(!isSuccess);
+        require(isSuccess);
         emit tokenToPointEvent(_id, _recharger, _amount);
         return true;
     }
@@ -80,7 +81,7 @@ contract BankRoll {
      returns (bool)
      {
          bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
-         assert(!isSuccess);
+         require(isSuccess);
          emit pointToTokenEvent(_id, _withdrawer, _amount);
          return true;
      }
