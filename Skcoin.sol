@@ -78,8 +78,12 @@ contract Skcoin {
     }
 
     modifier onlyAdministrator(){
-        address _customerAddress = msg.sender;
-        require(administrators[_customerAddress]);
+        require(administrators[msg.sender]);
+        _;
+    }
+
+    modifier onlyBankrollContract() {
+        require(msg.sender == bankrollAddress);
         _;
     }
 
@@ -308,6 +312,7 @@ contract Skcoin {
     */
     function redeemGamePoints(address _caller, uint _amountOfTokens)
     public
+    onlyBankrollContract
     returns (bool)
     {
         // Only BankROll contract
