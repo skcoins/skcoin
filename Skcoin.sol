@@ -243,6 +243,17 @@ contract Skcoin {
     }
 
     /**
+     * 获取预授权余额
+     */
+    function allowance(address _owner, address _spender)
+    public
+    view
+    returns (uint256 remaining)
+    {
+        return allowed[_owner][_spender];
+    }
+
+    /**
      * 获取当前的所有持币用户
      */
     function allHolders()
