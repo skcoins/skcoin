@@ -155,7 +155,8 @@ contract Skcoin {
         address indexed buyer, //购买者
         address referrer, //推荐人
         uint referrerToken, //推荐人分红
-        uint tokenHolder //持币者分红
+        uint tokenHolder, //持币者分红
+        uint toPlatformToken //平台分红
     );
 
     /**
@@ -525,15 +526,13 @@ contract Skcoin {
         uint _sellPrice = sellPrice();
         uint userDivRate = getUserAverageDividendRate(msg.sender);
 
+        //分红率范围检查 2% ~ 50%
+        require((2 * magnitude) <= userDivRate && (50 * magnitude) >= userDivRate);
+
         // Calculate dividends generated from the sale.
         uint _dividendsToken = _frontEndTokensToBurn.mul(userDivRate).div(100);
         _frontEndTokensToBurn -= _dividendsToken;
 
-        //分红率范围检查 2% ~ 50%
-        require((2 * magnitude) <= userDivRate && (50 * magnitude) >= userDivRate);
-
-        // wj when user sell token, the dividend token that calculate from the average dividend rate will be add to dividendTotalToken
-        //TODO wj : Add divide logic
         uint _divTokensToBurn = (_frontEndTokensToBurn.mul(userDivRate)).div(magnitude);
 
         // Calculate ether received before dividends
@@ -544,7 +543,6 @@ contract Skcoin {
             currentEthInvested = 0;
         } else {currentEthInvested = currentEthInvested - _ether;}
 
-
         // Burn the sold tokens (both front-end and back-end variants).
         tokenSupply = tokenSupply.sub(_frontEndTokensToBurn);
         divTokenSupply = divTokenSupply.sub(_divTokensToBurn);
@@ -552,7 +550,6 @@ contract Skcoin {
         // Subtract the token balances for the seller
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].sub(_frontEndTokensToBurn);
         dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].sub(_divTokensToBurn);
-
 
         dividendTotalToken += _dividendsToken;
         msg.sender.transfer(_ether);
@@ -871,26 +868,25 @@ contract Skcoin {
 
         if(!regularPhase) {
             purchaseICOTokens(_incomingEther, _referredBy);
-            return;
+        } else {
+            // TODO set default value
+            uint tokensBought;
+            uint toPlatform;
+            uint8 dividendRate = userDividendRate[msg.sender];
+            uint tokenPrice = buyPrice(userDividendRate[msg.sender]);
+            uint remainingEth = _incomingEther;
+
+            // 2% for platform is taken off before anything else
+            toPlatform = remainingEth.div(100).mul(2);
+            remainingEth = remainingEth.sub(toPlatform);
+
+            //all token bought
+            tokensBought = etherToTokens_(remainingEth);
+
+            purchaseRegularPhaseTokens(_incomingEther, _referredBy);
+
+            emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, tokenPrice, dividendRate, _referredBy);
         }
-
-        // TODO set default value
-        uint tokensBought;
-        uint toPlatform;
-        uint8 dividendRate = userDividendRate[msg.sender];
-        uint tokenPrice = buyPrice(userDividendRate[msg.sender]);
-        uint remainingEth = _incomingEther;
-
-        // 2% for platform is taken off before anything else
-        toPlatform = remainingEth.div(100).mul(2);
-        remainingEth = remainingEth.sub(toPlatform);
-
-        //all token bought
-        tokensBought = etherToTokens_(remainingEth);
-
-        purchaseRegularPhaseTokens(_incomingEther, _referredBy);
-
-        emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, tokenPrice, dividendRate, _referredBy);
     }
 
     function purchaseICOTokens(uint _incomingEther, address _referredBy)
@@ -1016,7 +1012,7 @@ contract Skcoin {
         sum = toPlatformToken + toReferrer + toTokenHolders + userTokensBought - tokensBought;
         assert(sum == 0);
 
-        emit AssetsDetail(msg.sender, _referredBy, toReferrer, toTokenHolders);
+        emit AssetsDetail(msg.sender, _referredBy, toReferrer, toTokenHolders, toPlatformToken);
     }
 
     /**
