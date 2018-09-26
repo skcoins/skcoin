@@ -477,22 +477,10 @@ contract Skcoin {
 
     // Fallback function only works during regular phase - part of anti-bot protection.
     function()
-    payable
     public
+    payable
     {
-        /**
-        / If the user has previously set a dividend rate, sending
-        /   Ether directly to the contract simply purchases more at
-        /   the most recent rate. If this is their first time, they
-        /   are automatically placed into the 20% rate `bucket'.
-        **/
-        require(regularPhase);
-        address _customerAddress = msg.sender;
-        if (userSelectedRate[_customerAddress]) {
-            purchaseTokens(msg.value, 0x0);
-        } else {
-            buyAndSetDivPercentage(0x0, 20);
-        }
+        revert();
     }
 
     /**
