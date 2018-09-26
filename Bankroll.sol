@@ -7,18 +7,18 @@ contract BankRoll {
     =================================*/
 
     modifier onlyOwner() {
-    require(msg.sender == owner);
-    _;
+        require(msg.sender == owner);
+        _;
     }
 
     modifier onlyAdministrator() {
-    require(msg.sender == owner || admins[msg.sender]);
-    _;
+        require(msg.sender == owner || admins[msg.sender]);
+        _;
     }
 
     modifier onlySkcContract() {
-    require(msg.sender == skcAddress);
-    _;
+        require(msg.sender == skcAddress);
+        _;
     }
 
     /*==============================
@@ -49,14 +49,14 @@ contract BankRoll {
         skcAddress = _skcAddress;
     }
 
-    function tokenToPointByMetaMask(uint256 _id, uint256 _amount)
+    function tokenToPointByMetaMask(uint256 _id, uint _amount)
     public
     returns (bool)
     {
         return tokenToPoint(_id, msg.sender, _amount);
     }
 
-    function tokenToPointBySkcContract(uint256 _id, address _recharger, uint256 _amount)
+    function tokenToPointBySkcContract(uint256 _id, address _recharger, uint _amount)
     public
     onlySkcContract
     returns (bool)
@@ -64,27 +64,26 @@ contract BankRoll {
         return tokenToPoint(_id, _recharger, _amount);
     }
 
-    function tokenToPoint(uint256 _id, address _recharger, uint256 _amount)
+    function tokenToPoint(uint256 _id, address _recharger, uint _amount)
     internal
     returns (bool)
     {
-        require(_amount>0);
-        bool isSuccess = skcAddress.call(bytes4(keccak256("redeemGamePoints(address, uint256)")), msg.sender, _amount);
+        bool isSuccess = skcAddress.call(bytes4(keccak256("redeemGamePoints(address,uint256)")), _recharger, _amount);
         require(isSuccess);
         emit tokenToPointEvent(_id, _recharger, _amount);
         return true;
     }
 
-     function pointToToken(uint256 _id, address _withdrawer, uint256 _amount)
-     public
-     onlyAdministrator
-     returns (bool)
-     {
-         bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
-         require(isSuccess);
-         emit pointToTokenEvent(_id, _withdrawer, _amount);
-         return true;
-     }
+    function pointToToken(uint256 _id, address _withdrawer, uint _amount)
+    public
+    onlyAdministrator
+    returns (bool)
+    {
+        bool isSuccess = skcAddress.call(bytes4(keccak256("transfer(address,uint256)")), _withdrawer, _amount);
+        require(isSuccess);
+        emit pointToTokenEvent(_id, _withdrawer, _amount);
+        return true;
+    }
 
     function updateLedger(uint256 _id, address[] _address, uint256[] _oldPionts, uint256[] _newPoints)
     public
@@ -94,8 +93,8 @@ contract BankRoll {
         require(_address.length == _oldPionts.length);
         require(_oldPionts.length == _newPoints.length);
         for (uint i = 0; i < _address.length; i++) {
-          //用户游戏积分更新
-          points[_address[i]] = _newPoints[i];
+            //用户游戏积分更新
+            points[_address[i]] = _newPoints[i];
         }
         emit ledgerRecordEvent(_id, _address, _oldPionts, _newPoints);
     }
@@ -105,7 +104,7 @@ contract BankRoll {
     onlyOwner
     {
         for (uint i = 0; i < _administrators.length; i++) {
-          admins[_administrators[i]] = true;
+            admins[_administrators[i]] = true;
         }
     }
 
@@ -114,7 +113,7 @@ contract BankRoll {
     onlyOwner
     {
         for (uint i = 0; i < _administrators.length; i++) {
-          admins[_administrators[i]] = false;
+            admins[_administrators[i]] = false;
         }
     }
 
@@ -122,7 +121,7 @@ contract BankRoll {
     public
     onlyOwner
     {
-       skcAddress = _skcAddress;
+        skcAddress = _skcAddress;
     }
 
 
