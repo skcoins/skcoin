@@ -14,14 +14,14 @@ contract Skcoin {
     uint constant internal               magnitude = 2 ** 64;//量级精度
 
     uint constant internal               icoHardCap = 250 ether;//ICO硬顶
-    uint constant internal               addressICOLimit = 1   ether;//单个地址的ICO最大购买数量
+    uint constant internal               addressICOLimit = 1 ether;//单个地址的ICO最大购买数量
     uint constant internal               icoMinBuyIn = 0.1 finney;//单个地址的ICO最小购买数量
     uint constant internal               icoMaxGasPrice = 50000000000 wei;//ICO的Gas单价
 
     uint constant internal               MULTIPLIER = 9615;//增量精度
     uint constant internal               MIN_ETH_BUYIN = 0.0001 ether;//最小Ether购买数量
     uint constant internal               MIN_TOKEN_SELL_AMOUNT = 0.0001 ether;//最小Token售卖数量
-    uint constant internal               MIN_TOKEN_TRANSFER = 10;//最小Token转账数量 wj need to be rejust
+    uint constant internal               MIN_TOKEN_TRANSFER = 1e10;//最小Token转账数量
     uint constant internal               referrer_percentage = 30; //推荐奖励
     uint constant internal               user_percentage = 60; //用户占比
 
@@ -128,15 +128,6 @@ contract Skcoin {
     event UserDividendRate(
         address user,
         uint divRate
-    );
-
-    /*
-    * 暂时未使用
-    */
-    event OnReinvestment(
-        address indexed customerAddress,
-        uint ethereumReinvested,
-        uint tokensMinted
     );
 
     /*
@@ -895,7 +886,6 @@ contract Skcoin {
     internal
     returns (uint)
     {
-        require(_incomingEther >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
         require(!regularPhase);
         uint toPlatform;
         uint tokensBought;
