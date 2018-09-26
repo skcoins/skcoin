@@ -321,11 +321,8 @@ contract Skcoin {
 
         //require(regularPhase);
 
-        // Calculate how many back-end dividend tokens to transfer.
-        // This amount is proportional to the caller's average dividend rate multiplied by the proportion of tokens being transferred.
         uint _amountOfDivTokens = _amountOfTokens.mul(getUserAverageDividendRate(_caller)).div(100);
 
-        // Exchange tokens
         frontTokenBalanceLedger[_caller] = frontTokenBalanceLedger[_caller].sub(_amountOfTokens);
         frontTokenBalanceLedger[bankrollAddress] = frontTokenBalanceLedger[bankrollAddress].add(_amountOfTokens);
         dividendTokenBalanceLedger_[_caller] = dividendTokenBalanceLedger_[_caller].sub(_amountOfDivTokens);
@@ -349,7 +346,7 @@ contract Skcoin {
         for (uint i = 0; i < holders.length; i++) {
             address holder = holders[i];
 
-            // ignore platform address
+            // 平台地址不再参与分红
             if(platformAddress == holder) {
                 continue;
             }
@@ -362,6 +359,7 @@ contract Skcoin {
                 frontTokenBalanceLedger[holder] = frontTokenBalanceLedger[holder].add(receivedToken);
                 dividendTokenBalanceLedger_[holder] = dividendTokenBalanceLedger_[holder].add(dividendToken);
                 allToken += receivedToken;
+                emit Transfer(address(this), holder, receivedToken);
             }
 
             uint toReferral = referralLedger[holder];
@@ -372,6 +370,7 @@ contract Skcoin {
                 divTokenSupply = divTokenSupply.add(referralDividendToken);
                 frontTokenBalanceLedger[holder] = frontTokenBalanceLedger[holder].add(toReferral);
                 dividendTokenBalanceLedger_[holder] = dividendTokenBalanceLedger_[holder].add(referralDividendToken);
+                emit Transfer(address(this), holder, toReferral);
             }
 
             if(receivedToken != 0 || toReferral > 0) {
@@ -379,7 +378,7 @@ contract Skcoin {
             }
         }
 
-        assert(allToken == dividendTotalToken);
+        require(allToken == dividendTotalToken, "divided result doesn't match with the total token");
 
         // 本次分红完成后，重置为0
         dividendTotalToken = 0;
@@ -387,10 +386,12 @@ contract Skcoin {
         emit Divide(msg.sender, _dividendTotalToken, holders.length);
     }
 
+    /**
+     * 更新持币用户
+     */
     function addOrUpdateHolder(address _holderAddr)
     internal
     {
-        // Check and add holder to array
         if (holderIndex[_holderAddr] == 0) {
             holderIndex[_holderAddr] = holders.length++;
             holders[holderIndex[_holderAddr]] = _holderAddr;
@@ -399,9 +400,6 @@ contract Skcoin {
 
     /**
      * ETH购买SKC，并设置选择的股息率
-     * Same as buy, but explicitly sets your dividend percentage.
-     * If this has been called before, it will update your `default' dividend
-     *   percentage for regular buy transactions going forward.
      */
     function buyAndSetDivPercentage(address _referredBy, uint8 _divChoice)
     public
@@ -413,25 +411,21 @@ contract Skcoin {
         if (!regularPhase) {
             uint gasPrice = tx.gasprice;
 
-            // Prevents ICO buyers from getting substantially burned if the ICO is reached
-            //   before their transaction is processed.
             require(gasPrice <= icoMaxGasPrice && ethInvestedDuringICO <= icoHardCap);
 
         }
 
-        // Dividend percentage should be a currently accepted value.
         require(validDividendRates[_divChoice]);
 
-        // Set the dividend fee percentage denominator.
+        // 设置用户选择的股息率
         userSelectedRate[msg.sender] = true;
         userDividendRate[msg.sender] = _divChoice;
         emit UserDividendRate(msg.sender, _divChoice);
 
-        // Finally, purchase tokens.
+        // 兑换Token
         purchaseTokens(msg.value, _referredBy);
     }
 
-    // All buys except for the above one require regular phase.
     /**
      * 使用上一次选择的股息率购买SKC
      */
@@ -446,36 +440,6 @@ contract Skcoin {
         purchaseTokens(msg.value, _referredBy);
     }
 
-    /**
-     * ETH购买SKC后，将SKC转账给target账户
-     */
-    function buyAndTransfer(address _referredBy, address target)
-    public
-    payable
-    {
-        buyAndTransfer(_referredBy, target, 20);
-    }
-
-    /**
-     * ETH购买SKC后，将SKC转账给target账户
-     */
-    function buyAndTransfer(address _referredBy, address target, uint8 divChoice)
-    public
-    payable
-    {
-        require(regularPhase);
-        address _customerAddress = msg.sender;
-        uint256 frontendBalance = frontTokenBalanceLedger[msg.sender];
-        if (userSelectedRate[_customerAddress] && divChoice == 0) {
-            purchaseTokens(msg.value, _referredBy);
-        } else {
-            buyAndSetDivPercentage(_referredBy, divChoice);
-        }
-        uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
-        transferTo(msg.sender, target, difference);
-    }
-
-    // Fallback function only works during regular phase - part of anti-bot protection.
     function()
     public
     payable
@@ -490,7 +454,6 @@ contract Skcoin {
     public
     {
         require(regularPhase);
-        // Retrieve token balance for caller, then sell them all.
         address _customerAddress = msg.sender;
         uint _tokens = frontTokenBalanceLedger[_customerAddress];
 
@@ -504,7 +467,6 @@ contract Skcoin {
     onlyHolders()
     public
     {
-        // No selling during the ICO. You don't get to flip that fast, sorry!
         // require(!icoPhase);
         require(regularPhase);
 
@@ -517,43 +479,39 @@ contract Skcoin {
         //分红率范围检查 2% ~ 50%
         require((2 * magnitude) <= userDivRate && (50 * magnitude) >= userDivRate);
 
-        // Calculate dividends generated from the sale.
+        // 计算售卖时产生的分成数
         uint _dividendsToken = _frontEndTokensToBurn.mul(userDivRate).div(100);
         _frontEndTokensToBurn -= _dividendsToken;
 
         uint _divTokensToBurn = (_frontEndTokensToBurn.mul(userDivRate)).div(magnitude);
 
-        // Calculate ether received before dividends
         uint _ether = tokensToEther_(_frontEndTokensToBurn);
 
         if (_ether > currentEthInvested) {
-            // Well, congratulations, you've emptied the coffers.
             currentEthInvested = 0;
         } else {currentEthInvested = currentEthInvested - _ether;}
 
-        // Burn the sold tokens (both front-end and back-end variants).
+        // 销毁Token
         tokenSupply = tokenSupply.sub(_frontEndTokensToBurn);
         divTokenSupply = divTokenSupply.sub(_divTokensToBurn);
 
-        // Subtract the token balances for the seller
+        // 扣去用户的Token余额
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].sub(_frontEndTokensToBurn);
         dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].sub(_divTokensToBurn);
 
         dividendTotalToken += _dividendsToken;
         msg.sender.transfer(_ether);
 
-        // Fire logging event.
         emit OnTokenSell(msg.sender, _ether, _amountOfTokens, _sellPrice, userDivRate);
+        emit Transfer(msg.sender, address(this), _amountOfTokens);
     }
 
     /**
      * Token的转账功能
-     * Transfer tokens from the caller to a new holder.
-     * No charge incurred for the transfer. We'd make a terrible bank.
      */
     function transfer(address _toAddress, uint _amountOfTokens)
-    onlyHolders()
     public
+    onlyAdministrator
     returns (bool)
     {
         require(_amountOfTokens >= MIN_TOKEN_TRANSFER
@@ -567,54 +525,33 @@ contract Skcoin {
      */
     function approve(address spender, uint tokens)
     public
+    onlyHolders
     returns (bool)
     {
         address _customerAddress = msg.sender;
         allowed[_customerAddress][spender] = tokens;
 
-        // Fire logging event.
         emit Approval(_customerAddress, spender, tokens);
-
-        // Good old ERC20.
         return true;
     }
 
     /**
-     * Transfer tokens from the caller to a new holder: the Used By Smart Contracts edition.
-     * No charge incurred for the transfer. No seriously, we'd make a terrible bank.
+     * 通过授权的方式转账
      */
     function transferFrom(address _from, address _toAddress, uint _amountOfTokens)
     public
+    onlyAdministrator
     returns (bool)
     {
-        // Setup variables
         address _customerAddress = _from;
-        // Make sure we own the tokens we're transferring, are ALLOWED to transfer that many tokens,
-        // and are transferring at least one full token.
+        // 确保用户Token余额充足或者授权余额充足
         require(_amountOfTokens >= MIN_TOKEN_TRANSFER
         && _amountOfTokens <= frontTokenBalanceLedger[_customerAddress]
         && _amountOfTokens <= allowed[_customerAddress][msg.sender]);
 
         transferFromInternal(_from, _toAddress, _amountOfTokens);
 
-        // Good old ERC20.
         return true;
-    }
-
-    function transferTo(address _from, address _to, uint _amountOfTokens)
-    public
-    {
-        if (_from != msg.sender) {
-            require(_amountOfTokens >= MIN_TOKEN_TRANSFER
-            && _amountOfTokens <= frontTokenBalanceLedger[_from]
-            && _amountOfTokens <= allowed[_from][msg.sender]);
-        }
-        else {
-            require(_amountOfTokens >= MIN_TOKEN_TRANSFER
-            && _amountOfTokens <= frontTokenBalanceLedger[_from]);
-        }
-
-        transferFromInternal(_from, _to, _amountOfTokens);
     }
 
     /**
@@ -625,7 +562,7 @@ contract Skcoin {
     {
         require(now > (icoOpenTime + 2 weeks) && icoOpenTime != 0);
 
-       // icoPhase = false;
+        // icoPhase = false;
         regularPhase = true;
     }
 
@@ -660,12 +597,10 @@ contract Skcoin {
     onlyAdministrator
     public
     {
-        // disable ico phase in case if that was not disabled yet
         // icoPhase = false;
         regularPhase = true;
     }
 
-    // The death of a great man demands the birth of a great son.
     /**
      * 更新管理员状态
      */
@@ -886,7 +821,6 @@ contract Skcoin {
         uint tokensBought;
         uint remainingEth = _incomingEther;
 
-        // 2% for platform is taken off before anything else
         toPlatform = remainingEth.div(100).mul(2);
         remainingEth = remainingEth.sub(toPlatform);
 
@@ -929,6 +863,7 @@ contract Skcoin {
         assert(sum == 0);
 
         emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, TOKEN_PRICE_INITIAL, 0, _referredBy);
+        emit Transfer(address(this), msg.sender, tokensBought);
     }
 
     function purchaseRegularPhaseTokens(uint _incomingEther, address _referredBy)
@@ -1001,6 +936,7 @@ contract Skcoin {
         assert(sum == 0);
 
         emit AssetsDetail(msg.sender, _referredBy, toReferrer, toTokenHolders, toPlatformToken);
+        emit Transfer(address(this), msg.sender, userTokensBought);
     }
 
     /**
@@ -1146,8 +1082,6 @@ contract Skcoin {
         uint ethFromICOPriceTokens;
         uint ethFromVarPriceTokens;
 
-        // Now, actually calculate:
-
         if (tokensToSellAtICOPrice != 0) {
 
             /* Here, unlike the sister equation in ethereumToTokens, we DON'T need to multiply by 1e18, since
@@ -1187,34 +1121,30 @@ contract Skcoin {
         address _customerAddress = _from;
         uint _amountOfFrontEndTokens = _amountOfTokens;
 
-        // Calculate how many back-end dividend tokens to transfer.
-        // This amount is proportional to the caller's average dividend rate multiplied by the proportion of tokens being transferred.
+        // 计算待转出的分成Token数量
         uint _amountOfDivTokens = _amountOfFrontEndTokens.mul(getUserAverageDividendRate(_customerAddress)).div(100);
 
         if (_customerAddress != msg.sender) {
-            // Update the allowed balance.
-            // Don't update this if we are transferring our own tokens (via transfer or buyAndTransfer)
+            // 更新授权账本
             allowed[_customerAddress][msg.sender] -= _amountOfTokens;
         }
 
-        // Exchange tokens
+        // 转Token
         frontTokenBalanceLedger[_customerAddress] = frontTokenBalanceLedger[_customerAddress].sub(_amountOfFrontEndTokens);
         frontTokenBalanceLedger[_toAddress] = frontTokenBalanceLedger[_toAddress].add(_amountOfFrontEndTokens);
         dividendTokenBalanceLedger_[_customerAddress] = dividendTokenBalanceLedger_[_customerAddress].sub(_amountOfDivTokens);
         dividendTokenBalanceLedger_[_toAddress] = dividendTokenBalanceLedger_[_toAddress].add(_amountOfDivTokens);
 
-        // Update Token holders
+        // 记录Token持有人
         addOrUpdateHolder(_customerAddress);
         addOrUpdateHolder(_toAddress);
 
-        // Recipient inherits dividend percentage if they have not already selected one.
         if (!userSelectedRate[_toAddress])
         {
             userSelectedRate[_toAddress] = true;
             userDividendRate[_toAddress] = userDividendRate[_customerAddress];
         }
 
-        // Fire logging event.
         emit Transfer(_customerAddress, _toAddress, _amountOfFrontEndTokens);
     }
 
