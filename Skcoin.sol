@@ -35,7 +35,6 @@ contract Skcoin {
     string public                        symbol = "SKC";  //缩写
     uint   internal                      tokenSupply = 0; //供应量
 
-    mapping(address => mapping(address => uint))     public allowed; //预授权列表
     mapping(address => bool)      public administrators; //管理员列表
 
     address internal                     platformAddress; //平台的收益地址
@@ -260,17 +259,6 @@ contract Skcoin {
     returns (uint)
     {
         return frontTokenBalanceLedger[_customerAddress];
-    }
-
-    /**
-     * 获取预授权余额
-     */
-    function allowance(address _owner, address _spender)
-    public
-    view
-    returns (uint256 remaining)
-    {
-        return allowed[_owner][_spender];
     }
 
     /**
@@ -532,50 +520,30 @@ contract Skcoin {
     }
 
     /**
-     * Token的转账功能
+     * bankroll合约的转账功能
      */
     function transfer(address _toAddress, uint _amountOfTokens)
     public
-    onlyAdministrator
+    onlyBankrollContract()
     returns (bool)
     {
         require(_amountOfTokens >= MIN_TOKEN_TRANSFER
         && _amountOfTokens <= frontTokenBalanceLedger[msg.sender]);
-        transferFromInternal(msg.sender, _toAddress, _amountOfTokens);
-        return true;
-    }
 
-    /**
-     * ERC20的授权函数
-     */
-    function approve(address spender, uint tokens)
-    public
-    onlyHolders
-    isNotPaused()
-    returns (bool)
-    {
+        require(_toAddress != address(0x0));
         address _customerAddress = msg.sender;
-        allowed[_customerAddress][spender] = tokens;
+        uint _amountOfFrontEndTokens = _amountOfTokens;
 
-        emit Approval(_customerAddress, spender, tokens);
-        return true;
-    }
+        // 计算待转出的分成Token数量
+        uint _amountOfDivTokens = _amountOfFrontEndTokens.mul(getUserAverageDividendRate(_customerAddress)).div(100);
 
-    /**
-     * 通过授权的方式转账
-     */
-    function transferFrom(address _from, address _toAddress, uint _amountOfTokens)
-    public
-    onlyAdministrator
-    returns (bool)
-    {
-        address _customerAddress = _from;
-        // 确保用户Token余额充足或者授权余额充足
-        require(_amountOfTokens >= MIN_TOKEN_TRANSFER
-        && _amountOfTokens <= frontTokenBalanceLedger[_customerAddress]
-        && _amountOfTokens <= allowed[_customerAddress][msg.sender]);
+        // 转Token
+        frontTokenBalanceLedger[_customerAddress] = frontTokenBalanceLedger[_customerAddress].sub(_amountOfFrontEndTokens);
+        frontTokenBalanceLedger[_toAddress] = frontTokenBalanceLedger[_toAddress].add(_amountOfFrontEndTokens);
+        dividendTokenBalanceLedger_[_customerAddress] = dividendTokenBalanceLedger_[_customerAddress].sub(_amountOfDivTokens);
+        dividendTokenBalanceLedger_[_toAddress] = dividendTokenBalanceLedger_[_toAddress].add(_amountOfDivTokens);
 
-        transferFromInternal(_from, _toAddress, _amountOfTokens);
+        emit Transfer(_customerAddress, _toAddress, _amountOfFrontEndTokens);
 
         return true;
     }
@@ -1136,41 +1104,6 @@ contract Skcoin {
 
         assert(totalEthReceived > 0);
         return totalEthReceived;
-    }
-
-    function transferFromInternal(address _from, address _toAddress, uint _amountOfTokens)
-    internal
-    {
-        //require(regularPhase);
-        require(_toAddress != address(0x0));
-        address _customerAddress = _from;
-        uint _amountOfFrontEndTokens = _amountOfTokens;
-
-        // 计算待转出的分成Token数量
-        uint _amountOfDivTokens = _amountOfFrontEndTokens.mul(getUserAverageDividendRate(_customerAddress)).div(100);
-
-        if (_customerAddress != msg.sender) {
-            // 更新授权账本
-            allowed[_customerAddress][msg.sender] -= _amountOfTokens;
-        }
-
-        // 转Token
-        frontTokenBalanceLedger[_customerAddress] = frontTokenBalanceLedger[_customerAddress].sub(_amountOfFrontEndTokens);
-        frontTokenBalanceLedger[_toAddress] = frontTokenBalanceLedger[_toAddress].add(_amountOfFrontEndTokens);
-        dividendTokenBalanceLedger_[_customerAddress] = dividendTokenBalanceLedger_[_customerAddress].sub(_amountOfDivTokens);
-        dividendTokenBalanceLedger_[_toAddress] = dividendTokenBalanceLedger_[_toAddress].add(_amountOfDivTokens);
-
-        // 记录Token持有人
-        addOrUpdateHolder(_customerAddress);
-        addOrUpdateHolder(_toAddress);
-
-        if (!userSelectedRate[_toAddress])
-        {
-            userSelectedRate[_toAddress] = true;
-            userDividendRate[_toAddress] = userDividendRate[_customerAddress];
-        }
-
-        emit Transfer(_customerAddress, _toAddress, _amountOfFrontEndTokens);
     }
 
     /*=======================
