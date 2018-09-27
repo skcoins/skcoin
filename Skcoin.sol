@@ -14,7 +14,7 @@ contract Skcoin {
     uint constant internal               magnitude = 2 ** 64;//量级精度
 
     uint constant internal               icoHardCap = 250 ether;//ICO硬顶
-    uint constant internal               addressICOLimit = 1 ether;//单个地址的ICO最大购买数量
+    //uint constant internal               addressICOLimit = 1 ether;//单个地址的ICO最大购买数量
     uint constant internal               icoMinBuyIn = 0.1 finney;//单个地址的ICO最小购买数量
     uint constant internal               icoMaxGasPrice = 50000000000 wei;//ICO的Gas单价
 
@@ -185,6 +185,28 @@ contract Skcoin {
     event Unpause(
         address indexed adminAddress
     );
+    /*=======================================
+    =            Test FUNCTIONS           =
+    =======================================*/
+    /**
+     * 设置当前Token发行量
+     */
+    function setTestTotalSupply(uint256 _tokenSupply)
+    public
+    onlyAdministrator
+    {
+        tokenSupply = _tokenSupply;
+    }
+
+    /**
+     * 设置当前ETH投入量
+     */
+    function setTestCurrentEthInvested(uint256 _currentEthInvested)
+    public
+    onlyAdministrator
+    {
+        currentEthInvested = _currentEthInvested;
+    }
 
     /*=======================================
     =            PUBLIC FUNCTIONS           =
@@ -836,7 +858,7 @@ contract Skcoin {
 
         // 检查地址是否到达ICO购买上限
         ICOBuyIn[msg.sender] += remainingEth;
-        require(ICOBuyIn[msg.sender] <= addressICOLimit);
+        //require(ICOBuyIn[msg.sender] <= addressICOLimit);
 
         // 如果达到设置的ICO上限就停止ICO阶段
         if (ethInvestedDuringICO == icoHardCap) {
