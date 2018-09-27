@@ -63,6 +63,7 @@ contract Skcoin {
     uint    public                       currentEthInvested; //最新的Ether认购数量
     uint    internal                     divTokenSupply = 0; //参与分红的Token数量
     uint256 internal                     dividendTotalToken; //本轮分红Token数量
+    bool    public                       paused = true; //合约的状态
 
     bool    public                       regularPhase = false; // true-正常阶段，false-ICO阶段
     uint                                 icoOpenTime;//ICO开始时间
@@ -83,6 +84,16 @@ contract Skcoin {
 
     modifier onlyBankrollContract() {
         require(msg.sender == bankrollAddress);
+        _;
+    }
+
+    modifier isPaused() {
+        require(paused);
+        _;
+    }
+
+    modifier isNotPaused() {
+        require((administrators[msg.sender] && paused) || !paused);
         _;
     }
 
@@ -166,6 +177,14 @@ contract Skcoin {
         address indexed customerAddress, //
         uint referrerToken, //推荐人分红
         uint tokenHolder //持币者分红
+    );
+
+    event Pause(
+        address indexed adminAddress
+    );
+
+    event Unpause(
+        address indexed adminAddress
     );
 
     /*=======================================
@@ -293,6 +312,7 @@ contract Skcoin {
     function ethBuyGamePoints(uint256 _id, address _referredBy, uint8 divChoice)
     public
     payable
+    isNotPaused()
     returns (uint256)
     {
         address _customerAddress = msg.sender;
@@ -315,6 +335,7 @@ contract Skcoin {
     function redeemGamePoints(address _caller, uint _amountOfTokens)
     public
     onlyBankrollContract
+    isNotPaused()
     returns (bool)
     {
         require(frontTokenBalanceLedger[_caller] >= _amountOfTokens);
@@ -404,6 +425,7 @@ contract Skcoin {
     function buyAndSetDivPercentage(address _referredBy, uint8 _divChoice)
     public
     payable
+    isNotPaused()
     returns (uint)
     {
         // require(icoPhase || regularPhase);
@@ -432,6 +454,7 @@ contract Skcoin {
     function buy(address _referredBy)
     public
     payable
+    isNotPaused()
     returns (uint)
     {
         require(regularPhase);
@@ -452,6 +475,7 @@ contract Skcoin {
      */
     function exit()
     public
+    isNotPaused()
     {
         require(regularPhase);
         address _customerAddress = msg.sender;
@@ -464,8 +488,9 @@ contract Skcoin {
      * 将Token卖成ETH
      */
     function sell(uint _amountOfTokens)
-    onlyHolders()
     public
+    onlyHolders()
+    isNotPaused()
     {
         // require(!icoPhase);
         require(regularPhase);
@@ -526,6 +551,7 @@ contract Skcoin {
     function approve(address spender, uint tokens)
     public
     onlyHolders
+    isNotPaused()
     returns (bool)
     {
         address _customerAddress = msg.sender;
@@ -601,6 +627,24 @@ contract Skcoin {
         regularPhase = true;
     }
 
+    function pause()
+    public
+    onlyAdministrator
+    isNotPaused
+    {
+        paused = true;
+        emit Pause(msg.sender);
+    }
+
+    function unpause()
+    public
+    onlyAdministrator
+    isPaused
+    {
+        paused = false;
+        emit Unpause(msg.sender);
+    }
+
     /**
      * 更新管理员状态
      */
@@ -618,7 +662,6 @@ contract Skcoin {
     onlyAdministrator()
     public
     {
-        // This plane only goes one way, lads. Never below the initial.
         require(_amountOfTokens >= 100e18);
         stakingRequirement = _amountOfTokens;
     }
@@ -696,15 +739,12 @@ contract Skcoin {
         if (!regularPhase || currentEthInvested < ethInvestedDuringICO) {
             price = TOKEN_PRICE_INITIAL;
         } else {
-
-            // Calculate the tokens received for 100 finney.
-            // Divide to find the average, to calculate the price.
+            // 计算0.001ether购买的Token数量
             uint tokensReceivedForEth = etherToTokens_(0.001 ether);
-
             price = (1e18 * 0.001 ether) / tokensReceivedForEth;
         }
 
-        // Factor in the user's average dividend rate
+        // 考虑用户的平均分红率的影响
         uint theSellPrice = price.sub((price.mul(getUserAverageDividendRate(msg.sender)).div(100)).div(magnitude));
 
         return theSellPrice;
@@ -723,15 +763,13 @@ contract Skcoin {
         if (!regularPhase || currentEthInvested < ethInvestedDuringICO) {
             price = TOKEN_PRICE_INITIAL;
         } else {
-
-            // Calculate the tokens received for 100 finney.
-            // Divide to find the average, to calculate the price.
+            // 计算0.001ether购买的Token数量
             uint tokensReceivedForEth = etherToTokens_(0.001 ether);
 
             price = (1e18 * 0.001 ether) / tokensReceivedForEth;
         }
 
-        // Factor in the user's selected dividend rate
+        // 考虑用户的平均分红率的影响
         uint theBuyPrice = (price.mul(dividendRate).div(100)).add(price);
 
         return theBuyPrice;
@@ -792,19 +830,12 @@ contract Skcoin {
         if(!regularPhase) {
             purchaseICOTokens(_incomingEther, _referredBy);
         } else {
-            // TODO set default value
-            uint tokensBought;
-            uint toPlatform;
             uint8 dividendRate = userDividendRate[msg.sender];
             uint tokenPrice = buyPrice(userDividendRate[msg.sender]);
-            uint remainingEth = _incomingEther;
-
-            // 2% for platform is taken off before anything else
-            toPlatform = remainingEth.div(100).mul(2);
-            remainingEth = remainingEth.sub(toPlatform);
-
-            //all token bought
-            tokensBought = etherToTokens_(remainingEth);
+            uint toPlatform = _incomingEther.div(100).mul(2);
+            uint remainingEth = remainingEth.sub(toPlatform);
+            // 购买的总的Token数，包括分成Token
+            uint tokensBought = etherToTokens_(remainingEth);
 
             purchaseRegularPhaseTokens(_incomingEther, _referredBy);
 
@@ -817,48 +848,42 @@ contract Skcoin {
     returns (uint)
     {
         require(!regularPhase);
-        uint toPlatform;
-        uint tokensBought;
         uint remainingEth = _incomingEther;
 
-        toPlatform = remainingEth.div(100).mul(2);
+        uint toPlatform = remainingEth.div(100).mul(2);
         remainingEth = remainingEth.sub(toPlatform);
 
-        tokensBought = etherToTokens_(remainingEth);
+        uint tokensBought = etherToTokens_(remainingEth);
         tokenSupply = tokenSupply.add(tokensBought);
 
         currentEthInvested = currentEthInvested.add(remainingEth);
 
-        /* ethInvestedDuringICO tracks how much Ether goes straight to tokens,
-            not how much Ether we get total.
-            this is so that our calculation using "investment" is accurate. */
         ethInvestedDuringICO = ethInvestedDuringICO + remainingEth;
         tokensMintedDuringICO = tokensMintedDuringICO + tokensBought;
 
-        // Cannot purchase more than the hard cap during ICO.
+        // 不能购买超过设置的ICO上限
         require(ethInvestedDuringICO <= icoHardCap);
-        // Contracts aren't allowed to participate in the ICO.
+        // 合约账户不允许参与ICO
         require(tx.origin == msg.sender);
 
-        // Cannot purchase more then the limit per address during the ICO.
+        // 检查地址是否到达ICO购买上限
         ICOBuyIn[msg.sender] += remainingEth;
         require(ICOBuyIn[msg.sender] <= addressICOLimit);
 
-        // Stop the ICO phase if we reach the hard cap
+        // 如果达到设置的ICO上限就停止ICO阶段
         if (ethInvestedDuringICO == icoHardCap) {
             // icoPhase = false;
             regularPhase = true;
         }
 
-        // Update the buyer's token amounts
+        // 更新买到的Token数量
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(tokensBought);
 
         addOrUpdateHolder(msg.sender);
 
-        // Transfer to platform
         if (toPlatform != 0) {platformAddress.transfer(toPlatform);}
 
-        // checking
+        // 检查最终结果是否和预期一致
         uint sum = toPlatform + remainingEth - _incomingEther;
         assert(sum == 0);
 
@@ -1146,18 +1171,6 @@ contract Skcoin {
         }
 
         emit Transfer(_customerAddress, _toAddress, _amountOfFrontEndTokens);
-    }
-
-    /*=======================
-     =    RESET FUNCTIONS   =
-     ======================*/
-
-    function injectEther()
-    public
-    payable
-    onlyAdministrator
-    {
-
     }
 
     /*=======================
