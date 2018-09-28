@@ -965,7 +965,7 @@ contract Skcoin {
         sum = toPlatformToken + toReferrer + toTokenHolders + userTokensBought - tokensBought;
         assert(sum == 0);
 
-        emit AssetsDetail(msg.sender, _referredBy, toReferrer, toTokenHolders, toPlatformToken);
+        emit BoughtAssetsDetail(msg.sender, _referredBy, toReferrer, toTokenHolders, toPlatformToken);
         emit Transfer(address(this), msg.sender, userTokensBought);
     }
 
