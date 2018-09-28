@@ -25,20 +25,21 @@ contract Skcoin {
     uint constant internal               referrer_percentage = 30; //推荐奖励
     uint constant internal               user_percentage = 60; //用户占比
 
-    uint public                          stakingRequirement = 100e18; // 推荐人获取推荐费最小持币数量
 
     /*================================
      =          CONFIGURABLES         =
      ================================*/
 
-    string public                        name = "Skcoin"; //名称
-    string public                        symbol = "SKC";  //缩写
-    uint   internal                      tokenSupply = 0; //供应量
+    string        public                 name = "Skcoin"; //名称
+    string        public                 symbol = "SKC";  //缩写
+    uint          internal               tokenSupply = 0; //供应量
+    address       internal               platformAddress; //平台的收益地址
+    address       public                 bankrollAddress; //游戏的资金地址
+    uint          public                 stakingRequirement = 100e18; // 推荐人获取推荐费最小持币数量
 
     mapping(address => bool)      public administrators; //管理员列表
 
-    address internal                     platformAddress; //平台的收益地址
-    address public                       bankrollAddress; //游戏的资金地址
+
 
 
     /*================================
@@ -66,6 +67,25 @@ contract Skcoin {
 
     bool    public                       regularPhase = false; // true-正常阶段，false-ICO阶段
     uint                                 icoOpenTime;//ICO开始时间
+
+    /*=================================
+    =             STRUCT              =
+    =================================*/
+
+    struct Variable {
+        uint toReferrer;
+        uint toTokenHolders;
+        uint toPlatformToken;
+
+        uint dividendETHAmount;
+        uint dividendTokenAmount;
+
+        uint tokensBought;
+        uint userTokensBought;
+
+        uint toPlatform;
+        uint remainingEth;
+    }
 
     /*=================================
     =            MODIFIERS            =
@@ -523,7 +543,7 @@ contract Skcoin {
         //分红率范围检查 2% ~ 50%
         require((2 * magnitude) <= userDivRate && (50 * magnitude) >= userDivRate);
 
-        // 计算售卖时产生的分成数
+        // 计算售卖时产生的分成token数
         uint _dividendsToken = _frontEndTokensToBurn.mul(userDivRate).div(100);
         uint _toTokenHolder = _dividendsToken.mul(user_percentage).div(100);
         uint _toPlatform = _dividendsToken.sub(_toTokenHolder);
@@ -564,8 +584,7 @@ contract Skcoin {
     onlyBankrollContract()
     returns (bool)
     {
-        require(_amountOfTokens >= MIN_TOKEN_TRANSFER
-        && _amountOfTokens <= frontTokenBalanceLedger[msg.sender]);
+        require(_amountOfTokens >= MIN_TOKEN_TRANSFER && _amountOfTokens <= frontTokenBalanceLedger[msg.sender]);
 
         require(_toAddress != address(0x0));
         address _customerAddress = msg.sender;
@@ -814,6 +833,13 @@ contract Skcoin {
      * 计算用户的平均股息率
      */
     function getUserAverageDividendRate(address user) public view returns (uint) {
+
+        if(dividendTokenBalanceLedger_[user] == 0) {
+            //ICO购买TOKEN后，在非ICO阶段卖出
+            //而且非ICO阶段未购买Token
+            //平均分红率为2
+            return 2 * magnitude;
+        }
         return (magnitude * dividendTokenBalanceLedger_[user]).div(frontTokenBalanceLedger[user]);
     }
 
@@ -838,7 +864,7 @@ contract Skcoin {
             uint8 dividendRate = userDividendRate[msg.sender];
             uint tokenPrice = buyPrice(userDividendRate[msg.sender]);
             uint toPlatform = _incomingEther.div(100).mul(2);
-            uint remainingEth = remainingEth.sub(toPlatform);
+            uint remainingEth = _incomingEther.sub(toPlatform);
             // 购买的总的Token数，包括分成Token
             uint tokensBought = etherToTokens_(remainingEth);
 
@@ -902,34 +928,24 @@ contract Skcoin {
     {
         require(regularPhase);
 
-        uint toReferrer = 0;
-        uint toTokenHolders = 0;
-        uint toPlatformToken = 0;
-
-        uint dividendETHAmount;
-        uint dividendTokenAmount;
-
-        uint tokensBought;
-        uint userTokensBought;
-
-
-        uint toPlatform = remainingEth.div(100).mul(2);
-        uint remainingEth = remainingEth.sub(toPlatform);
+        Variable memory v = Variable({toReferrer:0, toTokenHolders:0, toPlatformToken:0, dividendETHAmount:0, dividendTokenAmount:0, tokensBought:0, userTokensBought:0, toPlatform:0, remainingEth:0});
+        v.toPlatform = _incomingEther.div(100).mul(2);
+        v.remainingEth = _incomingEther.sub(v.toPlatform);
 
         // 计算Ether兑换的Token总量
-        tokensBought = etherToTokens_(remainingEth);
+        v.tokensBought = etherToTokens_(v.remainingEth);
 
-        dividendETHAmount = remainingEth.mul(userDividendRate[msg.sender]).div(100);
-        remainingEth = remainingEth.sub(dividendETHAmount);
+        v.dividendETHAmount = v.remainingEth.mul(userDividendRate[msg.sender]).div(100);
+        v.remainingEth = v.remainingEth.sub(v.dividendETHAmount);
 
         // 玩家最终买到的Token数量
-        userTokensBought = etherToTokens_(remainingEth);
+        v.userTokensBought = etherToTokens_(v.remainingEth);
         // 分红的Token总量
-        dividendTokenAmount = tokensBought.sub(userTokensBought);
+        v.dividendTokenAmount = v.tokensBought.sub(v.userTokensBought);
 
-        tokenSupply = tokenSupply.add(tokensBought);
-        currentEthInvested = currentEthInvested.add(remainingEth);
-        currentEthInvested = currentEthInvested.add(dividendETHAmount);
+        tokenSupply = tokenSupply.add(v.tokensBought);
+        currentEthInvested = currentEthInvested.add(v.remainingEth);
+        currentEthInvested = currentEthInvested.add(v.dividendETHAmount);
 
         /**
         * 1) 有推荐人：30% -> referrers, 60% -> user, 10% -> platform
@@ -938,35 +954,35 @@ contract Skcoin {
         if (_referredBy != 0x0000000000000000000000000000000000000000 &&
         _referredBy != msg.sender &&
         frontTokenBalanceLedger[_referredBy] >= stakingRequirement) {
-            toReferrer = (dividendTokenAmount.mul(referrer_percentage)).div(100);
-            referralLedger[_referredBy] = referralLedger[_referredBy].add(toReferrer);
+            v.toReferrer = (v.dividendTokenAmount.mul(referrer_percentage)).div(100);
+            referralLedger[_referredBy] = referralLedger[_referredBy].add(v.toReferrer);
         }
-        toTokenHolders = (dividendTokenAmount.mul(user_percentage)).div(100);
-        toPlatformToken = (dividendTokenAmount.sub(toReferrer)).sub(toTokenHolders);
+        v.toTokenHolders = (v.dividendTokenAmount.mul(user_percentage)).div(100);
+        v.toPlatformToken = (v.dividendTokenAmount.sub(v.toReferrer)).sub(v.toTokenHolders);
 
         // 更新分红账本
-        dividendTotalToken = dividendTotalToken.add(toTokenHolders);
-        frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(toPlatformToken);
+        dividendTotalToken = dividendTotalToken.add(v.toTokenHolders);
+        frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(v.toPlatformToken);
 
-        if (toPlatform != 0) {platformAddress.transfer(toPlatform);}
+        if (v.toPlatform != 0) {platformAddress.transfer(v.toPlatform);}
 
         // 更新买到的Token数量
-        frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(userTokensBought);
+        frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(v.userTokensBought);
         // 更新玩家具有分红率的Token数量
-        dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].add(userTokensBought.mul(userDividendRate[msg.sender]));
+        dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].add(v.userTokensBought.mul(userDividendRate[msg.sender]));
         // 更新分红Token的总量
-        divTokenSupply = divTokenSupply.add(userTokensBought.mul(userDividendRate[msg.sender]));
+        divTokenSupply = divTokenSupply.add(v.userTokensBought.mul(userDividendRate[msg.sender]));
 
         addOrUpdateHolder(msg.sender);
 
         // 检查最终结果是否和预期一致
-        uint sum = toPlatform + remainingEth + dividendETHAmount - _incomingEther;
+        uint sum = v.toPlatform + v.remainingEth + v.dividendETHAmount - _incomingEther;
         assert(sum == 0);
-        sum = toPlatformToken + toReferrer + toTokenHolders + userTokensBought - tokensBought;
+        sum = v.toPlatformToken + v.toReferrer + v.toTokenHolders + v.userTokensBought - v.tokensBought;
         assert(sum == 0);
 
-        emit BoughtAssetsDetail(msg.sender, _referredBy, toReferrer, toTokenHolders, toPlatformToken);
-        emit Transfer(address(this), msg.sender, userTokensBought);
+        emit BoughtAssetsDetail(msg.sender, _referredBy, v.toReferrer, v.toTokenHolders, v.toPlatformToken);
+        emit Transfer(address(this), msg.sender, v.userTokensBought);
     }
 
     /**
