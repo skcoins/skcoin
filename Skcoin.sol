@@ -161,10 +161,19 @@ contract Skcoin {
     /**
      * 记录推荐人分红和Token holder 分红
      */
-    event AssetsDetail(
+    event BoughtAssetsDetail(
         address indexed buyer, //购买者
         address referrer, //推荐人
         uint referrerToken, //推荐人分红
+        uint tokenHolder, //持币者分红
+        uint toPlatformToken //平台分红
+    );
+
+    /**
+     * 记录用户卖出Token时Token holder和平台 分红
+     */
+    event SellAssetsDetail(
+        address indexed seller, //出售者
         uint tokenHolder, //持币者分红
         uint toPlatformToken //平台分红
     );
@@ -516,6 +525,8 @@ contract Skcoin {
 
         // 计算售卖时产生的分成数
         uint _dividendsToken = _frontEndTokensToBurn.mul(userDivRate).div(100);
+        uint _toTokenHolder = _dividendsToken.mul(user_percentage).div(100);
+        uint _toPlatform = _dividendsToken.sub(_toTokenHolder);
         _frontEndTokensToBurn -= _dividendsToken;
 
         uint _divTokensToBurn = (_frontEndTokensToBurn.mul(userDivRate)).div(magnitude);
@@ -534,11 +545,15 @@ contract Skcoin {
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].sub(_frontEndTokensToBurn);
         dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].sub(_divTokensToBurn);
 
-        dividendTotalToken += _dividendsToken;
+        frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(_toPlatform);
+        dividendTotalToken += _toTokenHolder;
         msg.sender.transfer(_ether);
 
         emit OnTokenSell(msg.sender, _ether, _amountOfTokens, _sellPrice, userDivRate);
+        emit SellAssetsDetail(msg.sender, _toTokenHolder, _toPlatform);
+
         emit Transfer(msg.sender, address(this), _amountOfTokens);
+        emit Transfer(msg.sender, platformAddress, _toPlatform);
     }
 
     /**
@@ -965,7 +980,7 @@ contract Skcoin {
         require(_etherAmount > MIN_ETH_BUYIN, "Tried to buy tokens with too little eth.");
 
         if (!regularPhase) {
-            return _etherAmount.div(TOKEN_PRICE_INITIAL) * 1e18;
+            return _etherAmount.mul(1e18).div(TOKEN_PRICE_INITIAL);
         }
 
         /*
