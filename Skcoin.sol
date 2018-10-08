@@ -45,6 +45,15 @@ contract Skcoin {
     /*================================
      =            DATA               =
      ================================*/
+    uint           public                tokensMintedDuringICO; //ICO发行的Token数量
+    uint           public                ethInvestedDuringICO; //ICO认购的Ether数量
+    uint           public                currentEthInvested; //最新的Ether认购数量
+    bool           public                paused = true; //合约的状态
+    bool           public                regularPhase = false; // true-正常阶段，false-ICO阶段
+    uint           public                icoOpenTime;//ICO开始时间
+    uint           internal              divTokenSupply = 0; //参与分红的Token数量
+    uint256        internal              dividendTotalToken; //本轮分红Token数量
+    address[]      internal              holders; //Token持有者数组
 
     mapping(address => uint)    internal frontTokenBalanceLedger; // token bought total
     mapping(address => uint)    internal referralLedger; //推荐账本
@@ -56,17 +65,8 @@ contract Skcoin {
     mapping(address => uint8)   internal userDividendRate; //用户最终的分红比率
     mapping(address => uint256) internal holderIndex; // Mapping of holder addresses (index)
 
-    address[]                   internal holders; //Token持有者数组
 
-    uint    public                       tokensMintedDuringICO; //ICO发行的Token数量
-    uint    public                       ethInvestedDuringICO; //ICO认购的Ether数量
-    uint    public                       currentEthInvested; //最新的Ether认购数量
-    uint    internal                     divTokenSupply = 0; //参与分红的Token数量
-    uint256 internal                     dividendTotalToken; //本轮分红Token数量
-    bool    public                       paused = true; //合约的状态
 
-    bool    public                       regularPhase = false; // true-正常阶段，false-ICO阶段
-    uint                                 icoOpenTime;//ICO开始时间
 
     /*=================================
     =             STRUCT              =
@@ -540,6 +540,11 @@ contract Skcoin {
         uint _sellPrice = sellPrice();
         uint userDivRate = getUserAverageDividendRate(msg.sender);
 
+        //卖出时，设置默认的分红率为2%
+        if(userDivRate == 0) {
+            userDivRate = 2 * magnitude;
+        }
+
         //分红率范围检查 2% ~ 50%
         require((2 * magnitude) <= userDivRate && (50 * magnitude) >= userDivRate);
 
@@ -623,8 +628,8 @@ contract Skcoin {
      * 开启ICO阶段
      */
     function startICOPhase()
-    onlyAdministrator()
     public
+    onlyAdministrator()
     {
         require(icoOpenTime == 0);
         // icoPhase = true;
@@ -636,16 +641,16 @@ contract Skcoin {
      * 结束ICO阶段
      */
     function endICOPhase()
-    onlyAdministrator()
     public
+    onlyAdministrator()
     {
         //icoPhase = false;
         regularPhase = true;
     }
 
     function startRegularPhase()
-    onlyAdministrator
     public
+    onlyAdministrator
     {
         // icoPhase = false;
         regularPhase = true;
@@ -673,8 +678,8 @@ contract Skcoin {
      * 更新管理员状态
      */
     function setAdministrator(address _newAdmin, bool _status)
-    onlyAdministrator()
     public
+    onlyAdministrator()
     {
         administrators[_newAdmin] = _status;
     }
@@ -683,23 +688,23 @@ contract Skcoin {
     * 设置能够获取推荐费的最小持币数量
     */
     function setStakingRequirement(uint _amountOfTokens)
-    onlyAdministrator()
     public
+    onlyAdministrator()
     {
         require(_amountOfTokens >= 100e18);
         stakingRequirement = _amountOfTokens;
     }
 
     function setName(string _name)
-    onlyAdministrator()
     public
+    onlyAdministrator()
     {
         name = _name;
     }
 
     function setSymbol(string _symbol)
-    onlyAdministrator()
     public
+    onlyAdministrator()
     {
         symbol = _symbol;
     }
@@ -743,8 +748,8 @@ contract Skcoin {
     }
 
     function getDividendTokenBalanceOf(address _customerAddress)
-    view
     public
+    view
     returns (uint)
     {
         return dividendTokenBalanceLedger_[_customerAddress];
@@ -833,14 +838,7 @@ contract Skcoin {
      * 计算用户的平均股息率
      */
     function getUserAverageDividendRate(address user) public view returns (uint) {
-
-        if(dividendTokenBalanceLedger_[user] == 0) {
-            //ICO购买TOKEN后，在非ICO阶段卖出
-            //而且非ICO阶段未购买Token
-            //平均分红率为2
-            return 2 * magnitude;
-        }
-        return (magnitude * dividendTokenBalanceLedger_[user]).div(frontTokenBalanceLedger[user]);
+        return (magnitude * dividendTokenBalanceLedger_[user]).div(tokenNum);
     }
 
     function getMyAverageDividendRate() public view returns (uint) {
