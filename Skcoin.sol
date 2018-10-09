@@ -10,15 +10,15 @@ contract Skcoin {
 
     uint8 constant public                decimals = 18;//精度
 
-    uint constant internal               TOKEN_PRICE_INITIAL = 0.000653 ether;//SKC初始价
+    uint constant internal               TOKEN_PRICE_INITIAL = 0.000783887000559739 ether;//SKC初始价
     uint constant internal               magnitude = 2 ** 64;//量级精度
 
-    uint constant internal               icoHardCap = 250 ether;//ICO硬顶
+    uint constant internal               icoHardCap = 300 ether;//ICO硬顶
     //uint constant internal               addressICOLimit = 1 ether;//单个地址的ICO最大购买数量
     uint constant internal               icoMinBuyIn = 0.1 finney;//单个地址的ICO最小购买数量
     uint constant internal               icoMaxGasPrice = 50000000000 wei;//ICO的Gas单价
 
-    uint constant internal               MULTIPLIER = 9615;//增量精度
+    uint constant internal               MULTIPLIER = 12491;//增量精度
     uint constant internal               MIN_ETH_BUYIN = 0.0001 ether;//最小Ether购买数量
     uint constant internal               MIN_TOKEN_SELL_AMOUNT = 0.0001 ether;//最小Token售卖数量
     uint constant internal               MIN_TOKEN_TRANSFER = 1e10;//最小Token转账数量
@@ -30,7 +30,7 @@ contract Skcoin {
      =          CONFIGURABLES         =
      ================================*/
 
-    string        public                 name = "Skcoin"; //名称
+    string        public                 name = "SkCoin"; //名称
     string        public                 symbol = "SKC";  //缩写
     uint          internal               tokenSupply = 0; //供应量
     address       internal               platformAddress; //平台的收益地址
@@ -1066,7 +1066,7 @@ contract Skcoin {
         }
 
         /*
-         *  i = investment, p = price, t = number of tokens
+         *  y={ }
          *
          *  i_current = p_initial * t_current                   (for t_current <= t_initial)
          *  i_current = i_initial + (2/3)(t_current)^(3/2)      (for t_current >  t_initial)
@@ -1098,10 +1098,8 @@ contract Skcoin {
             revert();
         }
 
-        // Sanity check:
         assert(ethTowardsICOPriceTokens + ethTowardsVariablePriceTokens == _etherAmount);
 
-        // Separate out the number of tokens of each type this will buy:
         uint icoPriceTokens = 0;
         uint varPriceTokens = 0;
 
