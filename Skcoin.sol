@@ -549,9 +549,10 @@ contract Skcoin {
             _divTokensToBurn = 0;
             ICOTokenBalance[_customerAddress] -= _amountOfTokens;
         } else {
-            uint IOCToken = _amountOfTokens.add(ICOTokenBalance[_customerAddress]).sub(frontTokenBalanceLedger[_customerAddress]);
-            _divTokensToBurn = IOCToken.mul(userDivRate).div(magnitude);
-            ICOTokenBalance[_customerAddress] -= IOCToken;
+            uint normalToken = frontTokenBalanceLedger[_customerAddress].sub(ICOTokenBalance[_customerAddress]);
+            uint ICOToken = _amountOfTokens.sub(normalToken);
+            _divTokensToBurn = normalToken.mul(userDivRate).div(magnitude);
+            ICOTokenBalance[_customerAddress] -= ICOToken;
         }
         return _divTokensToBurn;
     }
@@ -607,8 +608,12 @@ contract Skcoin {
         divTokenSupply = divTokenSupply.sub(_divTokensToBurn);
 
         // 扣去用户的Token余额
-        frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].sub(_frontEndTokensToBurn);
-        dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].sub(_divTokensToBurn);
+        frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].sub(_amountOfTokens);
+        if(frontTokenBalanceLedger[msg.sender] != 0) {
+            dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].sub(_divTokensToBurn);
+        } else {
+            dividendTokenBalanceLedger_[msg.sender] = 0;
+        }
 
         frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(_toPlatform);
         dividendTotalToken += _toTokenHolder;
