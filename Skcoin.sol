@@ -278,6 +278,17 @@ contract Skcoin {
     }
 
     /**
+     * 当前合约待分成Token数量
+     */
+    function dividendTotalTokens()
+    public
+    view
+    returns (uint)
+    {
+        return dividendTotalToken;
+    }
+
+    /**
      * ICO阶段募集的ETH数量
      */
     function totalEtherICOReceived()
@@ -400,8 +411,9 @@ contract Skcoin {
         require(regularPhase);
 
         uint _dividendTotalToken = dividendTotalToken;
-        uint allToken;
-        for (uint i = 0; i < holders.length; i++) {
+        uint _divTokenSupply = divTokenSupply;
+        uint allToken = 0;
+        for (uint i = 1; i < holders.length; i++) {
             address holder = holders[i];
 
             // 平台地址不再参与分红
@@ -411,7 +423,7 @@ contract Skcoin {
 
             uint receivedToken = 0;
             if(dividendTokenBalanceLedger_[holder] > 0) {
-                receivedToken = dividendTotalToken.mul(dividendTokenBalanceLedger_[holder]).div(divTokenSupply);
+                receivedToken = dividendTotalToken.mul(dividendTokenBalanceLedger_[holder]).div(_divTokenSupply);
                 uint dividendToken = receivedToken.mul(getUserAverageDividendRate(holder)).div(magnitude);
                 divTokenSupply = divTokenSupply.add(dividendToken);
                 frontTokenBalanceLedger[holder] = frontTokenBalanceLedger[holder].add(receivedToken);
@@ -436,7 +448,7 @@ contract Skcoin {
             }
         }
 
-        require(allToken == dividendTotalToken, "divided result doesn't match with the total token");
+        require(allToken.div(10e10) == dividendTotalToken.div(10e10), "divided result doesn't match with the total token");
 
         // 本次分红完成后，重置为0
         dividendTotalToken = 0;
@@ -1020,7 +1032,7 @@ contract Skcoin {
         // 更新玩家具有分红率的Token数量
         dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].add(v.userTokensBought.mul(userDividendRate[msg.sender]).div(100));
         // 更新分红Token的总量
-        divTokenSupply = divTokenSupply.add(v.userTokensBought.mul(userDividendRate[msg.sender]));
+        divTokenSupply = divTokenSupply.add(v.userTokensBought.mul(userDividendRate[msg.sender]).div(100));
 
         addOrUpdateHolder(msg.sender);
 
