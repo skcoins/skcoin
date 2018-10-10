@@ -10,15 +10,15 @@ contract Skcoin {
 
     uint8 constant public                decimals = 18;//精度
 
-    uint constant internal               TOKEN_PRICE_INITIAL = 0.000653 ether;//SKC初始价
+    uint constant internal               TOKEN_PRICE_INITIAL = 0.000783887000559739 ether;//SKC初始价
     uint constant internal               magnitude = 2 ** 64;//量级精度
 
-    uint constant internal               icoHardCap = 250 ether;//ICO硬顶
+    uint constant internal               icoHardCap = 300.003745645219 ether;//ICO硬顶
     //uint constant internal               addressICOLimit = 1 ether;//单个地址的ICO最大购买数量
     uint constant internal               icoMinBuyIn = 0.1 finney;//单个地址的ICO最小购买数量
     uint constant internal               icoMaxGasPrice = 50000000000 wei;//ICO的Gas单价
 
-    uint constant internal               MULTIPLIER = 9615;//增量精度
+    uint constant internal               MULTIPLIER = 12491;//增量精度
     uint constant internal               MIN_ETH_BUYIN = 0.0001 ether;//最小Ether购买数量
     uint constant internal               MIN_TOKEN_SELL_AMOUNT = 0.0001 ether;//最小Token售卖数量
     uint constant internal               MIN_TOKEN_TRANSFER = 1e10;//最小Token转账数量
@@ -413,7 +413,7 @@ contract Skcoin {
         uint _dividendTotalToken = dividendTotalToken;
         uint _divTokenSupply = divTokenSupply;
         uint allToken = 0;
-        for (uint i = 1; i < holders.length; i++) {
+        for (uint i = 0; i < holders.length; i++) {
             address holder = holders[i];
 
             // 平台地址不再参与分红
@@ -463,6 +463,9 @@ contract Skcoin {
     internal
     {
         if (holderIndex[_holderAddr] == 0) {
+            if(holders.length > 0 && holders[0] == _holderAddr) {
+                return;
+            }
             holderIndex[_holderAddr] = holders.length++;
             holders[holderIndex[_holderAddr]] = _holderAddr;
         }
@@ -1066,74 +1069,61 @@ contract Skcoin {
         }
 
         /*
-         *  i = investment, p = price, t = number of tokens
+         *  i = ether数量, p = 价格, t = tokens数量
          *
-         *  i_current = p_initial * t_current                   (for t_current <= t_initial)
-         *  i_current = i_initial + (2/3)(t_current)^(3/2)      (for t_current >  t_initial)
+         *  i_当前 = p_初始值 * t_当前                  (当 i_当前 <= t_初始值)
+         *  i_当前 = i_初始值 + (3/5)(t_当前)^(5/3)      (当 i_当前 >  t_初始值)
          *
-         *  t_current = i_current / p_initial                   (for i_current <= i_initial)
-         *  t_current = t_initial + ((3/2)(i_current))^(2/3)    (for i_current >  i_initial)
+         *  t_当前 = i_当前 / p_初始值                   (当 i_当前 <= i_初始值)
+         *  t_当前 = t_初始值 + ((5/3)(i_当前))^(3/5)    (当 i_当前 >  i_初始值)
          */
 
-        // First, separate out the buy into two segments:
-        //  1) the amount of eth going towards ico-price tokens
-        //  2) the amount of eth going towards pyramid-price (variable) tokens
+        // 买入的Ether分为量部分:
+        //  1) 以ICO价格购买
+        //  2) 以变化的价格购买
         uint ethTowardsICOPriceTokens = 0;
         uint ethTowardsVariablePriceTokens = 0;
 
         if (currentEthInvested >= ethInvestedDuringICO) {
-            // Option One: All the ETH goes towards variable-price tokens
+            // 所有ether以变化的价格购买
             ethTowardsVariablePriceTokens = _etherAmount;
 
         } else if (currentEthInvested < ethInvestedDuringICO && currentEthInvested + _etherAmount <= ethInvestedDuringICO) {
-            // Option Two: All the ETH goes towards ICO-price tokens
+            // 所有ether以ICO价格购买
             ethTowardsICOPriceTokens = _etherAmount;
 
         } else if (currentEthInvested < ethInvestedDuringICO && currentEthInvested + _etherAmount > ethInvestedDuringICO) {
-            // Option Three: Some ETH goes towards ICO-price tokens, some goes towards variable-price tokens
+            // 部分Ether以ICO价格购买，部分以变化的价格购买
             ethTowardsICOPriceTokens = ethInvestedDuringICO.sub(currentEthInvested);
             ethTowardsVariablePriceTokens = _etherAmount.sub(ethTowardsICOPriceTokens);
         } else {
-            // Option Four: Should be impossible, and compiler should optimize it out of existence.
+            // 不应该存在的情况
             revert();
         }
 
-        // Sanity check:
         assert(ethTowardsICOPriceTokens + ethTowardsVariablePriceTokens == _etherAmount);
 
-        // Separate out the number of tokens of each type this will buy:
+        // 每种类型的Token购买数量
         uint icoPriceTokens = 0;
         uint varPriceTokens = 0;
 
-        // Now calculate each one per the above formulas.
-        // Note: since tokens have 18 decimals of precision we multiply the result by 1e18.
+        // Token有18位小数，所以需要乘1e18
         if (ethTowardsICOPriceTokens != 0) {
             icoPriceTokens = ethTowardsICOPriceTokens.mul(1e18).div(TOKEN_PRICE_INITIAL);
         }
 
         if (ethTowardsVariablePriceTokens != 0) {
-            // Note: we can't use "currentEthInvested" for this calculation, we must use:
-            //  currentEthInvested + ethTowardsICOPriceTokens
-            // This is because a split-buy essentially needs to simulate two separate buys -
-            // including the currentEthInvested update that comes BEFORE variable price tokens are bought!
+            // 使用currentEthInvested + ethTowardsICOPriceTokens计算，而不是currentEthInvested
+            // 因为在跨两个阶段购买时，用于购买ICO token的ether还未加在currentEthInvested中
 
-            uint simulatedEthBeforeInvested = toPowerOfThreeHalves(tokenSupply.div(MULTIPLIER * 1e6)).mul(2).div(3) + ethTowardsICOPriceTokens;
+            uint simulatedEthBeforeInvested = toPowerOfFiveThirds(tokenSupply.div(MULTIPLIER * 1e6)).mul(3).div(500) + ethTowardsICOPriceTokens;
             uint simulatedEthAfterInvested = simulatedEthBeforeInvested + ethTowardsVariablePriceTokens;
 
-            /* We have the equations for total tokens above; note that this is for TOTAL.
-               To get the number of tokens this purchase buys, use the simulatedEthInvestedBefore
-               and the simulatedEthInvestedAfter and calculate the difference in tokens.
-               This is how many we get. */
+            // 计算非ICO价格购买的Token数
+            uint tokensBefore = toPowerOfThirdFives(simulatedEthBeforeInvested.mul(500).div(3)).mul(MULTIPLIER);
+            uint tokensAfter = toPowerOfThirdFives(simulatedEthAfterInvested.mul(500).div(3)).mul(MULTIPLIER);
 
-            uint tokensBefore = toPowerOfTwoThirds(simulatedEthBeforeInvested.mul(3).div(2)).mul(MULTIPLIER);
-            uint tokensAfter = toPowerOfTwoThirds(simulatedEthAfterInvested.mul(3).div(2)).mul(MULTIPLIER);
-
-            /* Note that we could use tokensBefore = tokenSupply + icoPriceTokens instead of dynamically calculating tokensBefore;
-               either should work.
-
-               Investment IS already multiplied by 1e18; however, because this is taken to a power of (2/3),
-               we need to multiply the result by 1e6 to get back to the correct number of decimals. */
-
+            //用于计算的ether是乘了1e20的，在开了五分子三次方后需要乘以1e6
             varPriceTokens = (1e6) * tokensAfter.sub(tokensBefore);
         }
 
@@ -1154,36 +1144,36 @@ contract Skcoin {
         require(_tokens >= MIN_TOKEN_SELL_AMOUNT, "Tried to sell too few tokens.");
 
         /*
-         *  i = investment, p = price, t = number of tokens
+         *  i = ether数量, p = 价格, t = token数量
          *
-         *  i_current = p_initial * t_current                   (for t_current <= t_initial)
-         *  i_current = i_initial + (2/3)(t_current)^(3/2)      (for t_current >  t_initial)
+         *  i_当前 = p_初始 * t_当前                   (for t_当前 <= t_初始)
+         *  i_当前 = i_初始 + (2/3)(t_当前)^(3/2)      (for t_当前 >  t_初始)
          *
-         *  t_current = i_current / p_initial                   (for i_current <= i_initial)
-         *  t_current = t_initial + ((3/2)(i_current))^(2/3)    (for i_current >  i_initial)
+         *  t_当前 = i_当前 / p_初始                   (for i_当前 <= i_初始)
+         *  t_当前 = t_初始 + ((3/2)(i_当前))^(2/3)    (for i_当前 >  i_初始)
          */
 
-        // First, separate out the sell into two segments:
-        //  1) the amount of tokens selling at the ICO price.
-        //  2) the amount of tokens selling at the variable (pyramid) price
+        // 卖出的Ether分为量部分:
+        //  1) 以ICO价格卖出
+        //  2) 以变化的价格卖出
         uint tokensToSellAtICOPrice = 0;
         uint tokensToSellAtVariablePrice = 0;
 
         if (tokenSupply <= tokensMintedDuringICO) {
-            // Option One: All the tokens sell at the ICO price.
+            // 所有ether以ICO的价格卖出
             tokensToSellAtICOPrice = _tokens;
 
         } else if (tokenSupply > tokensMintedDuringICO && tokenSupply - _tokens >= tokensMintedDuringICO) {
-            // Option Two: All the tokens sell at the variable price.
+            // 所有ether以变化的价格卖出
             tokensToSellAtVariablePrice = _tokens;
 
         } else if (tokenSupply > tokensMintedDuringICO && tokenSupply - _tokens < tokensMintedDuringICO) {
-            // Option Three: Some tokens sell at the ICO price, and some sell at the variable price.
+            // 部分Ether以ICO价格卖出，部分以变化的价格卖出
             tokensToSellAtVariablePrice = tokenSupply.sub(tokensMintedDuringICO);
             tokensToSellAtICOPrice = _tokens.sub(tokensToSellAtVariablePrice);
 
         } else {
-            // Option Four: Should be impossible, and the compiler should optimize it out of existence.
+            // 不应该存在的情况
             revert();
         }
 
@@ -1204,17 +1194,8 @@ contract Skcoin {
         }
 
         if (tokensToSellAtVariablePrice != 0) {
-
-            /* Note: Unlike the sister function in ethereumToTokens, we don't have to calculate any "virtual" token count.
-               This is because in sells, we sell the variable price tokens **first**, and then we sell the ICO-price tokens.
-               Thus there isn't any weird stuff going on with the token supply.
-
-               We have the equations for total investment above; note that this is for TOTAL.
-               To get the eth received from this sell, we calculate the new total investment after this sell.
-               Note that we divide by 1e6 here as the inverse of multiplying by 1e6 in ethereumToTokens. */
-
-            uint investmentBefore = toPowerOfThreeHalves(tokenSupply.div(MULTIPLIER * 1e6)).mul(2).div(3);
-            uint investmentAfter = toPowerOfThreeHalves((tokenSupply - tokensToSellAtVariablePrice).div(MULTIPLIER * 1e6)).mul(2).div(3);
+            uint investmentBefore = toPowerOfFiveThirds(tokenSupply.div(MULTIPLIER * 1e6)).mul(3).div(500);
+            uint investmentAfter = toPowerOfFiveThirds((tokenSupply - tokensToSellAtVariablePrice).div(MULTIPLIER * 1e6)).mul(3).div(500);
 
             ethFromVarPriceTokens = investmentBefore.sub(investmentAfter);
         }
@@ -1233,6 +1214,18 @@ contract Skcoin {
         // m = 3, n = 2
         // sqrt(x^3)
         return sqrt(x ** 3);
+    }
+
+    function toPowerOfFiveThirds(uint x) public pure returns (uint) {
+        // m = 5, n = 3
+        // cbrt(x^5)
+        return cbrt(x ** 5);
+    }
+
+    function toPowerOfThirdFives(uint x) public pure returns (uint) {
+        // m = 3, n = 5
+        // cbrt(x^3)
+        return five(x ** 3);
     }
 
     function toPowerOfTwoThirds(uint x) public pure returns (uint) {
@@ -1256,6 +1249,15 @@ contract Skcoin {
         while (z < y) {
             y = z;
             z = (x / (z * z) + 2 * z) / 3;
+        }
+    }
+
+    function five(uint x) public pure returns (uint y) {
+        uint z = (x + 1) / 5;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / (z ** 4) + 4 * z) / 5;
         }
     }
 }
@@ -1291,3 +1293,10 @@ library SafeMath {
         return c;
     }
 }
+
+/**
+ * Note
+ * 1.user bought token when ICO and sell token without a dividend rate
+ * 2.the average dividend rate how to calculate
+ * 3.when platform start to sell, it should have fee?
+ */
