@@ -13,7 +13,7 @@ contract Skcoin {
     uint constant internal               TOKEN_PRICE_INITIAL = 0.000783887000559739 ether;//SKC初始价
     uint constant internal               magnitude = 2 ** 64;//量级精度
 
-    uint constant internal               icoHardCap = 300.003745645219 ether;//ICO硬顶
+    uint constant internal               icoHardCap = 300 ether;//ICO硬顶
     //uint constant internal               addressICOLimit = 1 ether;//单个地址的ICO最大购买数量
     uint constant internal               icoMinBuyIn = 0.1 finney;//单个地址的ICO最小购买数量
     uint constant internal               icoMaxGasPrice = 50000000000 wei;//ICO的Gas单价
@@ -30,7 +30,7 @@ contract Skcoin {
      =          CONFIGURABLES         =
      ================================*/
 
-    string        public                 name = "Skcoin"; //名称
+    string        public                 name = "SkCoin"; //名称
     string        public                 symbol = "SKC";  //缩写
     uint          internal               tokenSupply = 0; //供应量
     address       internal               platformAddress; //平台的收益地址
