@@ -495,21 +495,6 @@ contract Skcoin {
         purchaseTokens(msg.value, _referredBy);
     }
 
-    /**
-     * 使用上一次选择的股息率购买SKC
-     */
-    function buy(address _referredBy)
-    public
-    payable
-    isNotPaused()
-    returns (uint)
-    {
-        require(regularPhase);
-        address _customerAddress = msg.sender;
-        require(userSelectedRate[_customerAddress]);
-        purchaseTokens(msg.value, _referredBy);
-    }
-
     function()
     public
     payable
