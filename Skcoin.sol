@@ -983,7 +983,9 @@ contract Skcoin {
         require(regularPhase);
 
         Variable memory v = Variable({toReferrer:0, toTokenHolders:0, toPlatformToken:0, dividendETHAmount:0, dividendTokenAmount:0, tokensBought:0, userTokensBought:0, toPlatform:0, remainingEth:0});
+        //平台抽取的2%ether
         v.toPlatform = _incomingEther.div(100).mul(2);
+        //剩余的ether
         v.remainingEth = _incomingEther.sub(v.toPlatform);
 
         // 计算Ether兑换的Token总量
@@ -1138,22 +1140,22 @@ contract Skcoin {
          *  t_当前 = t_初始 + ((3/2)(i_当前))^(2/3)    (for i_当前 >  i_初始)
          */
 
-        // 卖出的Ether分为量部分:
+        // 卖出的Ether分为量部分（分割）:
         //  1) 以ICO价格卖出
         //  2) 以变化的价格卖出
         uint tokensToSellAtICOPrice = 0;
         uint tokensToSellAtVariablePrice = 0;
 
         if (tokenSupply <= tokensMintedDuringICO) {
-            // 所有ether以ICO的价格卖出
+            // 所有ether以ICO的价格卖出 正常阶段
             tokensToSellAtICOPrice = _tokens;
 
         } else if (tokenSupply > tokensMintedDuringICO && tokenSupply - _tokens >= tokensMintedDuringICO) {
-            // 所有ether以变化的价格卖出
+            // 所有ether以变化的价格卖出 ICO阶段
             tokensToSellAtVariablePrice = _tokens;
 
         } else if (tokenSupply > tokensMintedDuringICO && tokenSupply - _tokens < tokensMintedDuringICO) {
-            // 部分Ether以ICO价格卖出，部分以变化的价格卖出
+            // 部分Ether以ICO价格卖出，部分以变化的价格卖出 ICO阶段与正常阶段
             tokensToSellAtVariablePrice = tokenSupply.sub(tokensMintedDuringICO);
             tokensToSellAtICOPrice = _tokens.sub(tokensToSellAtVariablePrice);
 
@@ -1179,6 +1181,7 @@ contract Skcoin {
         }
 
         if (tokensToSellAtVariablePrice != 0) {
+            //s0
             uint investmentBefore = toPowerOfFiveThirds(tokenSupply.div(MULTIPLIER * 1e6)).mul(3).div(500);
             uint investmentAfter = toPowerOfFiveThirds((tokenSupply - tokensToSellAtVariablePrice).div(MULTIPLIER * 1e6)).mul(3).div(500);
 
@@ -1284,4 +1287,5 @@ library SafeMath {
  * 1.user bought token when ICO and sell token without a dividend rate
  * 2.the average dividend rate how to calculate
  * 3.when platform start to sell, it should have fee?
+ * 4.ICO 过渡到正常阶段自动分割Ether
  */
