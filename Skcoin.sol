@@ -365,11 +365,7 @@ contract Skcoin {
     {
         address _customerAddress = msg.sender;
         uint256 frontendBalance = frontTokenBalanceLedger[msg.sender];
-        if (userSelectedRate[_customerAddress] && divChoice == 0) {
-            purchaseTokens(msg.value, _referredBy);
-        } else {
-            buyAndSetDivPercentage(_referredBy, divChoice);
-        }
+        buyAndSetDivPercentage(_referredBy, divChoice);
         uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
 
         bool isSuccess = bankrollAddress.call(bytes4(keccak256("tokenToPointBySkcContract(uint256,address,uint256)")), _id, msg.sender, difference);
