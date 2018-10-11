@@ -524,9 +524,13 @@ contract Skcoin {
     returns (uint)
     {
         uint _divTokensToBurn = 0;
-
+        require(frontTokenBalanceLedger[_customerAddress] > 0);
         uint userDivRate = getUserAverageDividendRate(_customerAddress);
-
+        
+        // 三种情况： 
+        // 1） 本次出售的全部为分红Token  
+        // 2） 本次出售的全部为ICO阶段购买的Token
+        // 3） 本次出售的部分为分红Token，另一部分为ICO阶段购买的Token 
         if(ICOTokenBalance[_customerAddress].add(_amountOfTokens) < frontTokenBalanceLedger[_customerAddress]) {
             _divTokensToBurn = _amountOfTokens.mul(userDivRate).div(magnitude);
         } else if(ICOTokenBalance[_customerAddress] == frontTokenBalanceLedger[_customerAddress]) {
