@@ -1288,4 +1288,5 @@ library SafeMath {
  * 2.the average dividend rate how to calculate
  * 3.when platform start to sell, it should have fee?
  * 4.ICO 过渡到正常阶段自动分割Ether
+ * 5.分成后校验Token数量是否正确，设置新的精度变量，可供外部修改
  */
