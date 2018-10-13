@@ -52,12 +52,12 @@ contract Skcoin {
     bool           public                regularPhase = false; // true-正常阶段，false-ICO阶段
     uint           public                icoOpenTime;//ICO开始时间
     uint           internal              divTokenSupply = 0; //参与分红的Token数量
-    uint256        internal              dividendTotalToken; //本轮分红Token数量
+    uint           internal              profitPerDivToken; //每个分红Token获取的收益
     address[]      internal              holders; //Token持有者数组
 
     mapping(address => uint)    internal frontTokenBalanceLedger; // token bought total
     mapping(address => uint)    internal referralLedger; //推荐账本
-    mapping(address => uint)    internal dividendTokenBalanceLedger_; //分红账本
+    mapping(address => uint)    internal dividendTokenBalanceLedger; //分红账本
     mapping(address => uint)    internal ICOBuyIn; //ICO认购记录ether账本
     mapping(address => uint)    internal ICOTokenBalance; //ICO购买的Token余额
 
@@ -65,6 +65,7 @@ contract Skcoin {
     mapping(address => bool)    internal userSelectedRate; //用户选择的分红比率
     mapping(address => uint8)   internal userDividendRate; //用户最终的分红比率
     mapping(address => uint256) internal holderIndex; // Mapping of holder addresses (index)
+    mapping(address => int256)  internal payoutsTo; //用户已经提取分红数量的账本
 
     /*=================================
     =             STRUCT              =
@@ -278,17 +279,6 @@ contract Skcoin {
     }
 
     /**
-     * 当前合约待分成Token数量
-     */
-    function dividendTotalTokens()
-    public
-    view
-    returns (uint)
-    {
-        return dividendTotalToken;
-    }
-
-    /**
      * ICO阶段募集的ETH数量
      */
     function totalEtherICOReceived()
@@ -363,7 +353,6 @@ contract Skcoin {
     isNotPaused()
     returns (uint256)
     {
-        address _customerAddress = msg.sender;
         uint256 frontendBalance = frontTokenBalanceLedger[msg.sender];
         buyAndSetDivPercentage(_referredBy, divChoice);
         uint256 difference = SafeMath.sub(frontTokenBalanceLedger[msg.sender], frontendBalance);
@@ -390,66 +379,15 @@ contract Skcoin {
 
         frontTokenBalanceLedger[_caller] = frontTokenBalanceLedger[_caller].sub(_amountOfTokens);
         frontTokenBalanceLedger[bankrollAddress] = frontTokenBalanceLedger[bankrollAddress].add(_amountOfTokens);
-        dividendTokenBalanceLedger_[_caller] = dividendTokenBalanceLedger_[_caller].sub(_amountOfDivTokens);
-        divTokenSupply -= _amountOfDivTokens;
+        dividendTokenBalanceLedger[_caller] = dividendTokenBalanceLedger[_caller].sub(_amountOfDivTokens);
+        dividendTokenBalanceLedger[bankrollAddress] = dividendTokenBalanceLedger[bankrollAddress].add(_amountOfDivTokens);
+
+        // 更新分红记录
+        payoutsTo[_caller] -= (int256) (profitPerDivToken * _amountOfDivTokens);
+        payoutsTo[bankrollAddress] += (int256) (profitPerDivToken * _amountOfDivTokens);
 
         emit Transfer(_caller, bankrollAddress, _amountOfTokens);
         return true;
-    }
-
-    /*
-    * 将当前累积的Token分给当前的持币用户
-    */
-    function divide()
-    public
-    onlyAdministrator
-    {
-        require(regularPhase);
-
-        uint _dividendTotalToken = dividendTotalToken;
-        uint _divTokenSupply = divTokenSupply;
-        uint allToken = 0;
-        for (uint i = 0; i < holders.length; i++) {
-            address holder = holders[i];
-
-            // 平台地址不再参与分红
-            if(platformAddress == holder) {
-                continue;
-            }
-
-            uint receivedToken = 0;
-            if(dividendTokenBalanceLedger_[holder] > 0) {
-                receivedToken = dividendTotalToken.mul(dividendTokenBalanceLedger_[holder]).div(_divTokenSupply);
-                uint dividendToken = receivedToken.mul(getUserAverageDividendRate(holder)).div(magnitude);
-                divTokenSupply = divTokenSupply.add(dividendToken);
-                frontTokenBalanceLedger[holder] = frontTokenBalanceLedger[holder].add(receivedToken);
-                dividendTokenBalanceLedger_[holder] = dividendTokenBalanceLedger_[holder].add(dividendToken);
-                allToken += receivedToken;
-                emit Transfer(address(this), holder, receivedToken);
-            }
-
-            uint toReferral = referralLedger[holder];
-            if(receivedToken != 0 || toReferral > 0) {
-                uint referralDividendToken = toReferral.mul(getUserAverageDividendRate(holder)).div(magnitude);
-                referralLedger[holder] = 0;
-
-                divTokenSupply = divTokenSupply.add(referralDividendToken);
-                frontTokenBalanceLedger[holder] = frontTokenBalanceLedger[holder].add(toReferral);
-                dividendTokenBalanceLedger_[holder] = dividendTokenBalanceLedger_[holder].add(referralDividendToken);
-                emit Transfer(address(this), holder, toReferral);
-            }
-
-            if(receivedToken != 0 || toReferral > 0) {
-                emit DividendDetail(holder, toReferral, receivedToken);
-            }
-        }
-
-        require(allToken.div(10e10) == dividendTotalToken.div(10e10), "divided result doesn't match with the total token");
-
-        // 本次分红完成后，重置为0
-        dividendTotalToken = 0;
-
-        emit Divide(msg.sender, _dividendTotalToken, holders.length);
     }
 
     /**
@@ -526,11 +464,11 @@ contract Skcoin {
         uint _divTokensToBurn = 0;
         require(frontTokenBalanceLedger[_customerAddress] > 0);
         uint userDivRate = getUserAverageDividendRate(_customerAddress);
-        
-        // 三种情况： 
-        // 1） 本次出售的全部为分红Token  
+
+        // 三种情况：
+        // 1） 本次出售的全部为分红Token
         // 2） 本次出售的全部为ICO阶段购买的Token
-        // 3） 本次出售的部分为分红Token，另一部分为ICO阶段购买的Token 
+        // 3） 本次出售的部分为分红Token，另一部分为ICO阶段购买的Token
         if(ICOTokenBalance[_customerAddress].add(_amountOfTokens) < frontTokenBalanceLedger[_customerAddress]) {
             _divTokensToBurn = _amountOfTokens.mul(userDivRate).div(magnitude);
         } else if(ICOTokenBalance[_customerAddress] == frontTokenBalanceLedger[_customerAddress]) {
@@ -553,7 +491,6 @@ contract Skcoin {
     onlyHolders()
     isNotPaused()
     {
-        // require(!icoPhase);
         require(regularPhase);
 
         require(_amountOfTokens <= frontTokenBalanceLedger[msg.sender]);
@@ -562,28 +499,29 @@ contract Skcoin {
         uint _sellPrice = sellPrice();
         uint userDivRate = getUserAverageDividendRate(msg.sender);
 
-        //ICO购买后，未设置分红率
-        //卖出时，设置默认的分红率为2%
-        if(userDivRate == 0) {
-            userDivRate = 2 * magnitude / 100;
-        }
-
-        //分红率范围检查 2% ~ 50%
-        require((2 * magnitude / 100) <= userDivRate && (50 * magnitude /100) >= userDivRate);
-
-        //平台卖出时，分红率为0
-        if(msg.sender == platformAddress) {
-            userDivRate = 0;
-        }
+        //正常阶段分红率范围检查 2% ~ 50% ICO阶段Token分红率0
+        require((2 * magnitude / 100 <= userDivRate && 50 * magnitude /100 >= userDivRate)
+            || (userDivRate == 0 && frontTokenBalanceLedger[msg.sender] == ICOTokenBalance[msg.sender]));
 
         //计算待销毁的分成Token
         uint _divTokensToBurn = reduceDividendToken(msg.sender, _amountOfTokens);
+        uint _divTokensToDividevd = 0;
 
-        // 计算售卖时产生的分成token
-        uint _dividendsToken = _frontEndTokensToBurn.mul(userDivRate).div(magnitude);
-        uint _toTokenHolder = _dividendsToken.mul(user_percentage).div(100);
-        uint _toPlatform = _dividendsToken.sub(_toTokenHolder);
-        _frontEndTokensToBurn -= _dividendsToken;
+        //平台卖出时，分红率为0
+        if(msg.sender != platformAddress) {
+            _divTokensToDividevd = _divTokensToBurn;
+        }
+
+        // 计算售卖时产生的分成详细
+        uint _toTokenHolder = _divTokensToDividevd.mul(user_percentage).div(100);
+        uint _toPlatform = _divTokensToDividevd.sub(_toTokenHolder);
+        _frontEndTokensToBurn -= _divTokensToDividevd;
+
+        // 加上卖掉的分红Token产生的收益
+        _frontEndTokensToBurn += profitPerDivToken  * _divTokensToBurn;
+
+        // wj should add?
+        //payoutsTo[msg.sender] -= profitPerDivToken  * _divTokensToBurn;
 
         uint _ether = tokensToEther_(_frontEndTokensToBurn);
 
@@ -598,13 +536,18 @@ contract Skcoin {
         // 扣去用户的Token余额
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].sub(_amountOfTokens);
         if(frontTokenBalanceLedger[msg.sender] != 0) {
-            dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].sub(_divTokensToBurn);
+            dividendTokenBalanceLedger[msg.sender] = dividendTokenBalanceLedger[msg.sender].sub(_divTokensToBurn);
         } else {
-            dividendTokenBalanceLedger_[msg.sender] = 0;
+            dividendTokenBalanceLedger[msg.sender] = 0;
         }
 
         frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(_toPlatform);
-        dividendTotalToken += _toTokenHolder;
+
+        // 更新分成Token收益率
+        if (divTokenSupply > 0) {
+            profitPerDivToken = profitPerDivToken.add((_toTokenHolder * magnitude) / divTokenSupply);
+        }
+
         msg.sender.transfer(_ether);
 
         emit OnTokenSell(msg.sender, _ether, _amountOfTokens, _sellPrice, userDivRate);
@@ -634,8 +577,12 @@ contract Skcoin {
         // 转Token
         frontTokenBalanceLedger[_customerAddress] = frontTokenBalanceLedger[_customerAddress].sub(_amountOfFrontEndTokens);
         frontTokenBalanceLedger[_toAddress] = frontTokenBalanceLedger[_toAddress].add(_amountOfFrontEndTokens);
-        dividendTokenBalanceLedger_[_toAddress] = dividendTokenBalanceLedger_[_toAddress].add(_toAddressToken);
-        divTokenSupply = divTokenSupply.add(_toAddressToken);
+        dividendTokenBalanceLedger[_customerAddress] = dividendTokenBalanceLedger[_customerAddress].sub(_toAddressToken);
+        dividendTokenBalanceLedger[_toAddress] = dividendTokenBalanceLedger[_toAddress].add(_toAddressToken);
+
+        // 更新分红记录
+        payoutsTo[_customerAddress] += (int256) (profitPerDivToken * _toAddressToken);
+        payoutsTo[platformAddress] -= (int256) (profitPerDivToken * _toAddressToken);
 
         emit Transfer(_customerAddress, _toAddress, _amountOfFrontEndTokens);
 
@@ -785,7 +732,7 @@ contract Skcoin {
     view
     returns (uint)
     {
-        return dividendTokenBalanceLedger_[_customerAddress];
+        return dividendTokenBalanceLedger[_customerAddress];
     }
 
     /**
@@ -889,7 +836,7 @@ contract Skcoin {
             return 0;
         }
 
-        return (magnitude * dividendTokenBalanceLedger_[user]).div(tokenNum);
+        return (magnitude * dividendTokenBalanceLedger[user]).div(tokenNum);
     }
 
     function getMyAverageDividendRate()
@@ -898,6 +845,17 @@ contract Skcoin {
     returns (uint)
     {
         return getUserAverageDividendRate(msg.sender);
+    }
+
+    /**
+     * 用户能提取的分成
+     */
+    function dividendsOf(address _customerAddress)
+    public
+    view
+    returns(uint)
+    {
+        return (uint) ((int256)(profitPerDivToken * dividendTokenBalanceLedger[_customerAddress]) - payoutsTo[_customerAddress]) / magnitude;
     }
 
     /*==========================================
@@ -911,19 +869,33 @@ contract Skcoin {
     {
         require(_incomingEther >= MIN_ETH_BUYIN || msg.sender == bankrollAddress, "Tried to buy below the min eth buyin threshold.");
 
-        if(!regularPhase) {
-            purchaseICOTokens(_incomingEther, _referredBy);
-        } else {
-            uint8 dividendRate = userDividendRate[msg.sender];
+        uint toICOEther = 0;
+        uint toNormalEther = 0;
+
+        //ICO阶段到正常阶段的过渡过程
+        if(!regularPhase && _incomingEther.mul(98).div(100).add(currentEthInvested) > icoHardCap) {
+            toICOEther = icoHardCap.sub(currentEthInvested).mul(100).div(98);
+            toNormalEther = _incomingEther.sub(toICOEther);
+        }
+
+        //正常阶段
+        if(regularPhase) {
+            toNormalEther = _incomingEther;
+        }
+
+        if(toICOEther != 0) {
+            purchaseICOTokens(toICOEther, _referredBy);
+        }
+
+        if(toNormalEther != 0) {
             uint tokenPrice = buyPrice(userDividendRate[msg.sender]);
-            uint toPlatform = _incomingEther.div(100).mul(2);
-            uint remainingEth = _incomingEther.sub(toPlatform);
+            uint toPlatform = toNormalEther.div(100).mul(2);
             // 购买的总的Token数，包括分成Token
-            uint tokensBought = etherToTokens_(remainingEth);
+            uint tokensBought = etherToTokens_(toNormalEther.sub(toPlatform));
 
-            purchaseRegularPhaseTokens(_incomingEther, _referredBy);
+            purchaseRegularPhaseTokens(toNormalEther, _referredBy);
 
-            emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, tokenPrice, dividendRate, _referredBy);
+            emit OnTokenPurchase(msg.sender, toNormalEther, tokensBought, tokenPrice, userDividendRate[msg.sender], _referredBy);
         }
     }
 
@@ -1011,13 +983,20 @@ contract Skcoin {
         _referredBy != msg.sender &&
         frontTokenBalanceLedger[_referredBy] >= stakingRequirement) {
             v.toReferrer = (v.dividendTokenAmount.mul(referrer_percentage)).div(100);
-            referralLedger[_referredBy] = referralLedger[_referredBy].add(v.toReferrer);
+            frontTokenBalanceLedger[_referredBy] = frontTokenBalanceLedger[_referredBy].add(v.toReferrer);
+            emit Transfer(address(this), _referredBy, v.toReferrer);
         }
         v.toTokenHolders = (v.dividendTokenAmount.mul(user_percentage)).div(100);
         v.toPlatformToken = (v.dividendTokenAmount.sub(v.toReferrer)).sub(v.toTokenHolders);
 
-        // 更新分红账本
-        dividendTotalToken = dividendTotalToken.add(v.toTokenHolders);
+        // 购买到的分红Token数量
+        uint dividendTokensBought = v.userTokensBought.mul(userDividendRate[msg.sender]).div(100);
+        uint profitTokens = dividendTokensBought * (v.toTokenHolders * magnitude / (divTokenSupply));
+
+        // 更新分红收益率
+        profitPerDivToken      = profitPerDivToken.add((v.toTokenHolders.mul(magnitude)).div(divTokenSupply));
+        payoutsTo[msg.sender] += (int256) ((profitPerDivToken * dividendTokensBought) - profitTokens);
+
         frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(v.toPlatformToken);
 
         if (v.toPlatform != 0) {platformAddress.transfer(v.toPlatform);}
@@ -1025,9 +1004,9 @@ contract Skcoin {
         // 更新买到的Token数量
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(v.userTokensBought);
         // 更新玩家具有分红率的Token数量
-        dividendTokenBalanceLedger_[msg.sender] = dividendTokenBalanceLedger_[msg.sender].add(v.userTokensBought.mul(userDividendRate[msg.sender]).div(100));
+        dividendTokenBalanceLedger[msg.sender] = dividendTokenBalanceLedger[msg.sender].add(dividendTokensBought);
         // 更新分红Token的总量
-        divTokenSupply = divTokenSupply.add(v.userTokensBought.mul(userDividendRate[msg.sender]).div(100));
+        divTokenSupply = divTokenSupply.add(dividendTokensBought);
 
         addOrUpdateHolder(msg.sender);
 
@@ -1284,9 +1263,9 @@ library SafeMath {
 
 /**
  * Note
- * 1.user bought token when ICO and sell token without a dividend rate
- * 2.the average dividend rate how to calculate
- * 3.when platform start to sell, it should have fee?
+ * ---1.user bought token when ICO and sell token without a dividend rate
+ * ---2.the average dividend rate how to calculate
+ * ---3.when platform start to sell, it should have fee?
  * 4.ICO 过渡到正常阶段自动分割Ether
  * 5.分成后校验Token数量是否正确，设置新的精度变量，可供外部修改
  */
