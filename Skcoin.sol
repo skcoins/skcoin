@@ -493,8 +493,8 @@ contract Skcoin {
         uint userDivRate = getUserAverageDividendRate(msg.sender);
 
         //正常阶段分红率范围检查 2% ~ 50% ICO阶段Token分红率0
-        require((2 * magnitude / 100 <= userDivRate && 50 * magnitude /100 >= userDivRate)
-            || (userDivRate == 0 && frontTokenBalanceLedger[msg.sender] == ICOTokenBalance[msg.sender]));
+        require((2 * magnitude / 100 <= userDivRate && 50 * magnitude / 100 >= userDivRate) ||
+            (userDivRate == 0 && frontTokenBalanceLedger[msg.sender] == ICOTokenBalance[msg.sender]));
 
         //计算待销毁的分成Token
         uint _divTokensToBurn = reduceDividendToken(msg.sender, _amountOfTokens);
@@ -511,10 +511,10 @@ contract Skcoin {
         _frontEndTokensToBurn -= _divTokensToDividevd;
 
         // 加上卖掉的分红Token产生的收益
-        _frontEndTokensToBurn += profitPerDivToken * _divTokensToBurn;
+        _frontEndTokensToBurn += profitPerDivToken.mul(_divTokensToBurn).div(magnitude);
 
         // wj should add?
-        //payoutsTo[msg.sender] -= profitPerDivToken  * _divTokensToBurn;
+        //payoutsTo[msg.sender] -= profitPerDivToken  * _divTokensToBurn.div(magnitude);
 
         uint _ether = tokensToEther_(_frontEndTokensToBurn);
 
