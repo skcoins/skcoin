@@ -95,6 +95,11 @@ contract Skcoin {
         _;
     }
 
+    modifier dividendHolder() {
+        require(dividendsOf(msg.sender) > 0);
+        _;
+    }
+
     modifier onlyAdministrator(){
         require(administrators[msg.sender]);
         _;
@@ -213,28 +218,6 @@ contract Skcoin {
     event Unpause(
         address indexed adminAddress
     );
-    /*=======================================
-    =            Test FUNCTIONS           =
-    =======================================*/
-    /**
-     * 设置当前Token发行量
-     */
-    function setTestTotalSupply(uint256 _tokenSupply)
-    public
-    onlyAdministrator
-    {
-        tokenSupply = _tokenSupply;
-    }
-
-    /**
-     * 设置当前ETH投入量
-     */
-    function setTestCurrentEthInvested(uint256 _currentEthInvested)
-    public
-    onlyAdministrator
-    {
-        currentEthInvested = _currentEthInvested;
-    }
 
     /*=======================================
     =            PUBLIC FUNCTIONS           =
@@ -327,7 +310,7 @@ contract Skcoin {
     */
     function setBankrollAddress(address _bankrollAddress)
     public
-    onlyAdministrator
+    onlyAdministrator()
     {
         bankrollAddress = _bankrollAddress;
     }
@@ -337,11 +320,25 @@ contract Skcoin {
     */
     function setPlatformAddress(address _platformAddress)
     public
-    onlyAdministrator
+    onlyAdministrator()
     {
         platformAddress = _platformAddress;
         userSelectedRate[platformAddress] = true;
         userDividendRate[platformAddress] = 50;
+    }
+
+    /**
+    * 用户手动触发分成
+    */
+    function dividend()
+    public
+    dividendHolder()
+    {
+        require(regularPhase);
+        uint _dividends = dividendsOf(msg.sender);
+
+        payoutsTo[msg.sender] += (int256) (_dividends * magnitude);
+        frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(_dividends);
     }
 
     /*
@@ -367,13 +364,11 @@ contract Skcoin {
     */
     function redeemGamePoints(address _caller, uint _amountOfTokens)
     public
-    onlyBankrollContract
+    onlyBankrollContract()
     isNotPaused()
     returns (bool)
     {
         require(frontTokenBalanceLedger[_caller] >= _amountOfTokens);
-
-        //require(regularPhase);
 
         uint _amountOfDivTokens = reduceDividendToken(_caller, _amountOfTokens);
 
@@ -414,12 +409,10 @@ contract Skcoin {
     isNotPaused()
     returns (uint)
     {
-        // require(icoPhase || regularPhase);
         if (!regularPhase) {
             uint gasPrice = tx.gasprice;
 
             require(gasPrice <= icoMaxGasPrice && ethInvestedDuringICO <= icoHardCap);
-
         }
 
         require(validDividendRates[_divChoice]);
@@ -518,7 +511,7 @@ contract Skcoin {
         _frontEndTokensToBurn -= _divTokensToDividevd;
 
         // 加上卖掉的分红Token产生的收益
-        _frontEndTokensToBurn += profitPerDivToken  * _divTokensToBurn;
+        _frontEndTokensToBurn += profitPerDivToken * _divTokensToBurn;
 
         // wj should add?
         //payoutsTo[msg.sender] -= profitPerDivToken  * _divTokensToBurn;
@@ -612,34 +605,24 @@ contract Skcoin {
     onlyAdministrator()
     {
         require(icoOpenTime == 0);
-        // icoPhase = true;
         regularPhase = false;
         icoOpenTime = now;
     }
 
     /**
-     * 结束ICO阶段
+     * 结束ICO阶段,进入正常阶段
      */
-    function endICOPhase()
+    function startRegularPhase()
     public
     onlyAdministrator()
     {
-        //icoPhase = false;
-        regularPhase = true;
-    }
-
-    function startRegularPhase()
-    public
-    onlyAdministrator
-    {
-        // icoPhase = false;
         regularPhase = true;
     }
 
     function pause()
     public
-    onlyAdministrator
-    isNotPaused
+    onlyAdministrator()
+    isNotPaused()
     {
         paused = true;
         emit Pause(msg.sender);
@@ -647,8 +630,8 @@ contract Skcoin {
 
     function unpause()
     public
-    onlyAdministrator
-    isPaused
+    onlyAdministrator()
+    isPaused()
     {
         paused = false;
         emit Unpause(msg.sender);
@@ -876,6 +859,9 @@ contract Skcoin {
         if(!regularPhase && _incomingEther.mul(98).div(100).add(currentEthInvested) > icoHardCap) {
             toICOEther = icoHardCap.sub(currentEthInvested).mul(100).div(98);
             toNormalEther = _incomingEther.sub(toICOEther);
+        } else if(!regularPhase) {
+            //ICO阶段
+            toICOEther = _incomingEther;
         }
 
         //正常阶段
@@ -991,22 +977,22 @@ contract Skcoin {
 
         // 购买到的分红Token数量
         uint dividendTokensBought = v.userTokensBought.mul(userDividendRate[msg.sender]).div(100);
-        uint profitTokens = dividendTokensBought * (v.toTokenHolders * magnitude / (divTokenSupply));
+        // 更新分红Token的总量
+        divTokenSupply = divTokenSupply.add(dividendTokensBought);
 
         // 更新分红收益率
-        profitPerDivToken      = profitPerDivToken.add((v.toTokenHolders.mul(magnitude)).div(divTokenSupply));
+        profitPerDivToken = profitPerDivToken.add((v.toTokenHolders.mul(magnitude)).div(divTokenSupply));
+        uint profitTokens = dividendTokensBought * (v.toTokenHolders * magnitude / (divTokenSupply));
         payoutsTo[msg.sender] += (int256) ((profitPerDivToken * dividendTokensBought) - profitTokens);
 
+        //更新平台分红
         frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(v.toPlatformToken);
-
         if (v.toPlatform != 0) {platformAddress.transfer(v.toPlatform);}
 
         // 更新买到的Token数量
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(v.userTokensBought);
         // 更新玩家具有分红率的Token数量
         dividendTokenBalanceLedger[msg.sender] = dividendTokenBalanceLedger[msg.sender].add(dividendTokensBought);
-        // 更新分红Token的总量
-        divTokenSupply = divTokenSupply.add(dividendTokensBought);
 
         addOrUpdateHolder(msg.sender);
 
