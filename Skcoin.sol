@@ -511,7 +511,7 @@ contract Skcoin {
         _frontEndTokensToBurn -= _divTokensToDividevd;
 
         // 加上卖掉的分红Token产生的收益
-        _frontEndTokensToBurn += profitPerDivToken.mul(_divTokensToBurn).div(magnitude);
+        //_frontEndTokensToBurn += profitPerDivToken.mul(_divTokensToBurn).div(magnitude);
 
         // wj should add?
         //payoutsTo[msg.sender] -= profitPerDivToken  * _divTokensToBurn.div(magnitude);
