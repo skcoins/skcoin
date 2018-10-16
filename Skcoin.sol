@@ -151,9 +151,8 @@ contract Skcoin {
     * 手动触发分成
     */
     event Divide(
-        address indexed administrator, //管理员地址
-        uint totalToken, // 待分成总的SKC数量
-        uint holderNumber //当前SKC持有人数量
+        address indexed customerAddress, //用户地址
+        uint totalToken // 获得的分成Token数
     );
 
     /*
@@ -171,15 +170,6 @@ contract Skcoin {
         address indexed from, //Token转出地址
         address indexed to, //Token转入地址
         uint tokens //token数量
-    );
-
-    /*
-    * 将Token授权给其它地址
-    */
-    event Approval(
-        address indexed tokenOwner, //Token的原来持有者
-        address indexed spender, //被授权人，可以花费tokenOwner授权数量的Token
-        uint tokens //授权的Token数量
     );
 
     /**
@@ -200,15 +190,6 @@ contract Skcoin {
         address indexed seller, //出售者
         uint tokenHolder, //持币者分红
         uint toPlatformToken //平台分红
-    );
-
-    /**
-     * 记录推荐人分红和Token holder 分红
-     */
-    event DividendDetail(
-        address indexed customerAddress, //
-        uint referrerToken, //推荐人分红
-        uint tokenHolder //持币者分红
     );
 
     event Pause(
@@ -341,6 +322,7 @@ contract Skcoin {
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].add(_dividends);
         pureTokenBalance[msg.sender] = pureTokenBalance[msg.sender].add(_dividends);
 
+        emit Divide(msg.sender, _dividends);
         emit Transfer(address(this), msg.sender, _dividends);
     }
 
