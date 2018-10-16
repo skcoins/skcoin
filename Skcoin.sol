@@ -484,7 +484,7 @@ contract Skcoin {
         //计算分成
         uint dividends = (uint) ((int256)(profitPerDivToken * dividendTokenBalanceLedger[msg.sender]) - payoutsTo[msg.sender]) / magnitude;
         _frontEndTokensToBurn += dividends;
-        payoutsTo[msg.sender] += (int256) (dividends * magnitude);
+        payoutsTo[msg.sender] += (int256) (dividends.mul(magnitude).div(1e18));
 
         //计算待销毁的分成Token
         uint _divTokensToBurn = reduceDividendToken(msg.sender, _amountOfTokens);
