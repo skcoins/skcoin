@@ -377,9 +377,6 @@ contract Skcoin {
     internal
     {
         if (holderIndex[_holderAddr] == 0) {
-            if(holders.length > 0 && holders[0] == _holderAddr) {
-                return;
-            }
             holderIndex[_holderAddr] = holders.length++;
             holders[holderIndex[_holderAddr]] = _holderAddr;
         }
@@ -517,7 +514,9 @@ contract Skcoin {
         if(frontTokenBalanceLedger[msg.sender] != 0) {
             dividendTokenBalanceLedger[msg.sender] = dividendTokenBalanceLedger[msg.sender].sub(_divTokensToBurn);
         } else {
+            divTokenSupply -= dividendTokenBalanceLedger[msg.sender];
             dividendTokenBalanceLedger[msg.sender] = 0;
+            payoutsTo[msg.sender] = 0;
         }
 
         frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(_toPlatform);
