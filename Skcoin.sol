@@ -511,13 +511,7 @@ contract Skcoin {
 
         // 扣去用户的Token余额
         frontTokenBalanceLedger[msg.sender] = frontTokenBalanceLedger[msg.sender].sub(_amountOfTokens);
-        if(frontTokenBalanceLedger[msg.sender] != 0) {
-            dividendTokenBalanceLedger[msg.sender] = dividendTokenBalanceLedger[msg.sender].sub(_divTokensToBurn);
-        } else {
-            divTokenSupply -= dividendTokenBalanceLedger[msg.sender];
-            dividendTokenBalanceLedger[msg.sender] = 0;
-            payoutsTo[msg.sender] = 0;
-        }
+        dividendTokenBalanceLedger[msg.sender] = dividendTokenBalanceLedger[msg.sender].sub(_divTokensToBurn);
 
         frontTokenBalanceLedger[platformAddress] = frontTokenBalanceLedger[platformAddress].add(_toPlatform);
         pureTokenBalance[platformAddress] = pureTokenBalance[platformAddress].add(_toPlatform);
