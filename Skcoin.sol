@@ -488,8 +488,9 @@ contract Skcoin {
         uint _divTokensToDividevd = 0;
 
         //平台卖出时，分红率为0
-        if(msg.sender != platformAddress) {
-            _divTokensToDividevd = _divTokensToBurn;
+        //最后一个分红Token持有者卖出时，分红率为0
+        if(msg.sender == platformAddress || dividendTokenBalanceLedger[msg.sender] == divTokenSupply) {
+            _divTokensToDividevd = 0;
         }
 
         // 计算售卖时产生的分成详细
