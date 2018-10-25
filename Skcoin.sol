@@ -393,16 +393,17 @@ contract Skcoin {
     {
         if (!regularPhase) {
             uint gasPrice = tx.gasprice;
-
             require(gasPrice <= icoMaxGasPrice && ethInvestedDuringICO <= icoHardCap);
         }
 
         require(validDividendRates[_divChoice]);
 
         // 设置用户选择的股息率
-        userSelectedRate[msg.sender] = true;
-        userDividendRate[msg.sender] = _divChoice;
-        emit UserDividendRate(msg.sender, _divChoice);
+        if(!regularPhase) {
+            userSelectedRate[msg.sender] = true;
+            userDividendRate[msg.sender] = _divChoice;
+            emit UserDividendRate(msg.sender, _divChoice);
+        }
 
         // 兑换Token
         purchaseTokens(msg.value, _referredBy);
@@ -873,9 +874,6 @@ contract Skcoin {
         require(!regularPhase);
         uint remainingEth = _incomingEther;
 
-        uint toPlatform = remainingEth.div(100).mul(2);
-        remainingEth = remainingEth.sub(toPlatform);
-
         uint tokensBought = etherToTokens_(remainingEth);
         tokenSupply = tokenSupply.add(tokensBought);
 
@@ -905,10 +903,8 @@ contract Skcoin {
 
         addOrUpdateHolder(msg.sender);
 
-        if (toPlatform != 0) {platformAddress.transfer(toPlatform);}
-
         // 检查最终结果是否和预期一致
-        uint sum = toPlatform + remainingEth - _incomingEther;
+        uint sum = remainingEth - _incomingEther;
         assert(sum == 0);
 
         emit OnTokenPurchase(msg.sender, _incomingEther, tokensBought, TOKEN_PRICE_INITIAL, 0, _referredBy);
@@ -1112,19 +1108,13 @@ contract Skcoin {
             revert();
         }
 
-        // Sanity check:
+        //一致性校验
         assert(tokensToSellAtVariablePrice + tokensToSellAtICOPrice == _tokens);
 
-        // Track how much Ether we get from selling at each price function:
         uint ethFromICOPriceTokens;
         uint ethFromVarPriceTokens;
 
         if (tokensToSellAtICOPrice != 0) {
-
-            /* Here, unlike the sister equation in ethereumToTokens, we DON'T need to multiply by 1e18, since
-               we will be passed in an amount of tokens to sell that's already at the 18-decimal precision.
-               We need to divide by 1e18 or we'll have too much Ether. */
-
             ethFromICOPriceTokens = tokensToSellAtICOPrice.mul(TOKEN_PRICE_INITIAL).div(1e18);
         }
 
