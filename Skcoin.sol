@@ -399,7 +399,7 @@ contract Skcoin {
         require(validDividendRates[_divChoice]);
 
         // 设置用户选择的股息率
-        if(!regularPhase) {
+        if(regularPhase) {
             userSelectedRate[msg.sender] = true;
             userDividendRate[msg.sender] = _divChoice;
             emit UserDividendRate(msg.sender, _divChoice);
