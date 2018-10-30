@@ -398,8 +398,8 @@ contract Skcoin {
 
         require(validDividendRates[_divChoice]);
 
-        // 设置用户选择的股息率
-        if(regularPhase) {
+        // 正常阶段或则ICO过渡到正常阶段两种情况下都记录股息率
+        if(regularPhase || (icoHardCap.sub(currentEthInvested) < msg.value)) {
             userSelectedRate[msg.sender] = true;
             userDividendRate[msg.sender] = _divChoice;
             emit UserDividendRate(msg.sender, _divChoice);
@@ -838,9 +838,11 @@ contract Skcoin {
         uint toNormalEther = 0;
 
         //ICO阶段到正常阶段的过渡过程
-        if(!regularPhase && _incomingEther.mul(98).div(100).add(currentEthInvested) > icoHardCap) {
-            toICOEther = icoHardCap.sub(currentEthInvested).mul(100).div(98);
+        bool isTrans = false;
+        if(!regularPhase && _incomingEther.add(currentEthInvested) > icoHardCap) {
+            toICOEther = icoHardCap.sub(currentEthInvested);
             toNormalEther = _incomingEther.sub(toICOEther);
+            isTrans = true;
         } else if(!regularPhase) {
             //ICO阶段
             toICOEther = _incomingEther;
@@ -861,7 +863,7 @@ contract Skcoin {
             // 购买的总的Token数，包括分成Token
             uint tokensBought = etherToTokens_(toNormalEther.sub(toPlatform));
 
-            purchaseRegularPhaseTokens(toNormalEther, _referredBy);
+            purchaseRegularPhaseTokens(toNormalEther, _referredBy, isTrans);
 
             emit OnTokenPurchase(msg.sender, toNormalEther, tokensBought, tokenPrice, userDividendRate[msg.sender], _referredBy);
         }
@@ -911,11 +913,12 @@ contract Skcoin {
         emit Transfer(address(this), msg.sender, tokensBought);
     }
 
-    function purchaseRegularPhaseTokens(uint _incomingEther, address _referredBy)
+    function purchaseRegularPhaseTokens(uint _incomingEther, address _referredBy, bool isTrans)
     internal
     returns (uint)
     {
-        require(regularPhase);
+        //检查是否是正常阶段或则过渡阶段
+        require((isTrans && regularPhase) || regularPhase);
 
         Variable memory v = Variable({toReferrer:0, toTokenHolders:0, toPlatformToken:0, dividendETHAmount:0, dividendTokenAmount:0, tokensBought:0, userTokensBought:0, toPlatform:0, remainingEth:0});
         //平台抽取的2%ether
